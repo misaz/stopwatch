@@ -1,26 +1,28 @@
 {
-	"configurations": [
-		{
-			"name": "Win32",
-			"includePath": [
-				"${default}",
-				"C:/MaximSDK/Libraries/CMSIS/Device/Maxim/MAX32655/Include",
-				"C:/MaximSDK/Libraries/PeriphDrivers/Include/MAX32655",
-				"C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/profiles",
-				"C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/af",
-				"C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/services"
-			],
-			"defines": [
-				"${default}"
-			],
-			"intelliSenseMode": "gcc-arm",
-			"compilerPath": "C:/MaximSDK/Tools/GNUTools/10.3/bin/arm-none-eabi-gcc.exe",
-			"browse": {
-				"path": [
-					"${default}"
-				]
-			}
-		}
-	],
-	"version": 4
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${default}",
+                "C:/MaximSDK/Libraries/CMSIS/Device/Maxim/MAX32655/Include",
+                "C:/MaximSDK/Libraries/PeriphDrivers/Include/MAX32655",
+                "C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/profiles",
+                "C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/af",
+                "C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/services",
+                "C:/MaximSDK/Libraries/Cordio/ble-host/sources/stack/dm",
+                "C:/MaximSDK/Libraries/Cordio/ble-host/sources/stack/hci"
+            ],
+            "defines": [
+                "${default}"
+            ],
+            "intelliSenseMode": "gcc-arm",
+            "compilerPath": "C:/MaximSDK/Tools/GNUTools/10.3/bin/arm-none-eabi-gcc.exe",
+            "browse": {
+                "path": [
+                    "${default}"
+                ]
+            }
+        }
+    ],
+    "version": 4
 }
