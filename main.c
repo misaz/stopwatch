@@ -1,87 +1,44 @@
-/*************************************************************************************************/
-/*!
-*  \file   main.c
-*
-*  \brief  Main file for fit application.
-*
-*  Copyright (c) 2013-2019 Arm Ltd. All Rights Reserved.
-*
-*  Copyright (c) 2019 Packetcraft, Inc.
-*
-*  Licensed under the Apache License, Version 2.0 (the "License");
-*  you may not use this file except in compliance with the License.
-*  You may obtain a copy of the License at
-*
-*      http://www.apache.org/licenses/LICENSE-2.0
-*
-*  Unless required by applicable law or agreed to in writing, software
-*  distributed under the License is distributed on an "AS IS" BASIS,
-*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-*  See the License for the specific language governing permissions and
-*  limitations under the License.
-*/
-/*************************************************************************************************/
-
 #include <string.h>
-#include "wsf_types.h"
-#include "wsf_trace.h"
-#include "wsf_bufio.h"
-#include "wsf_msg.h"
-#include "wsf_assert.h"
-#include "wsf_buf.h"
-#include "wsf_heap.h"
-#include "wsf_cs.h"
-#include "wsf_timer.h"
-#include "wsf_os.h"
 
-#include "sec_api.h"
-#include "hci_handler.h"
-#include "dm_handler.h"
-#include "l2c_handler.h"
-#include "att_handler.h"
-#include "smp_handler.h"
-#include "l2c_api.h"
-#include "att_api.h"
-#include "smp_api.h"
 #include "app_api.h"
-#include "hci_core.h"
 #include "app_terminal.h"
-#include "wut.h"
-#include "rtc.h"
-#include "trimsir_regs.h"
-
-#if defined(HCI_TR_EXACTLE) && (HCI_TR_EXACTLE == 1)
+#include "app_ui.h"
+#include "att_api.h"
+#include "att_handler.h"
+#include "dm_handler.h"
+#include "fit_api.h"
+#include "hci_core.h"
+#include "hci_handler.h"
+#include "l2c_api.h"
+#include "l2c_handler.h"
 #include "ll_init_api.h"
-#endif
-
 #include "pal_bb.h"
 #include "pal_cfg.h"
-
-#include "fit_api.h"
-#include "app_ui.h"
-
-/**************************************************************************************************
-  Macros
-**************************************************************************************************/
-
-/*! \brief UART TX buffer size */
-#define PLATFORM_UART_TERMINAL_BUFFER_SIZE 2048U
-#define DEFAULT_TX_POWER 0 /* dBm */
-
-/**************************************************************************************************
-  Global Variables
-**************************************************************************************************/
+#include "rtc.h"
+#include "sec_api.h"
+#include "smp_api.h"
+#include "smp_handler.h"
+#include "trimsir_regs.h"
+#include "wsf_assert.h"
+#include "wsf_buf.h"
+#include "wsf_bufio.h"
+#include "wsf_cs.h"
+#include "wsf_heap.h"
+#include "wsf_msg.h"
+#include "wsf_os.h"
+#include "wsf_timer.h"
+#include "wsf_trace.h"
+#include "wsf_types.h"
+#include "wut.h"
 
 /*! \brief  Pool runtime configuration. */
-static wsfBufPoolDesc_t mainPoolDesc[] = { { 16, 8 },
-                                           { 32, 4 },
-                                           { 192, 8 },
-                                           { 256, 8 },
-                                           { 512, 4 } };
+static wsfBufPoolDesc_t mainPoolDesc[] = {{16, 8},
+                                          {32, 4},
+                                          {192, 8},
+                                          {256, 8},
+                                          {512, 4}};
 
-#if defined(HCI_TR_EXACTLE) && (HCI_TR_EXACTLE == 1)
 static LlRtCfg_t mainLlRtCfg;
-#endif
 
 volatile int wutTrimComplete;
 
@@ -99,9 +56,7 @@ extern void StackInitFit(void);
  *  \return None.
  */
 /*************************************************************************************************/
-static void mainWsfInit(void)
-{
-#if defined(HCI_TR_EXACTLE) && (HCI_TR_EXACTLE == 1)
+static void mainWsfInit(void) {
     /* +12 for message headroom, + 2 event header, +255 maximum parameter length. */
     const uint16_t maxRptBufSize = 12 + 2 + 255;
 
@@ -113,7 +68,6 @@ static void mainWsfInit(void)
     mainPoolDesc[2].num = mainLlRtCfg.maxAdvReports;
     mainPoolDesc[3].len = aclBufSize;
     mainPoolDesc[3].num = mainLlRtCfg.numTxBufs + mainLlRtCfg.numRxBufs;
-#endif
 
     const uint8_t numPools = sizeof(mainPoolDesc) / sizeof(mainPoolDesc[0]);
 
@@ -128,33 +82,11 @@ static void mainWsfInit(void)
 #endif
 }
 
-/*************************************************************************************************/
-/*!
-*  \fn     WUT_IRQHandler
-*
-*  \brief  WUY interrupt handler.
-*
-*  \return None.
-*/
-/*************************************************************************************************/
-void WUT_IRQHandler(void)
-{
+void WUT_IRQHandler(void) {
     MXC_WUT_Handler();
 }
 
-/*************************************************************************************************/
-/*!
-*  \fn     wutTrimCb
-*
-*  \brief  Callback function for the WUT 32 kHz crystal trim.
-*
-*  \param  err    Error code from the WUT driver.
-*
-*  \return None.
-*/
-/*************************************************************************************************/
-void wutTrimCb(int err)
-{
+void wutTrimCb(int err) {
     if (err != E_NO_ERROR) {
         APP_TRACE_INFO1("32 kHz trim error %d\n", err);
     } else {
@@ -164,20 +96,7 @@ void wutTrimCb(int err)
     wutTrimComplete = 1;
 }
 
-/*************************************************************************************************/
-/*!
-*  \fn     main
-*
-*  \brief  Entry point for demo software.
-*
-*  \param  None.
-*
-*  \return None.
-*/
-/*************************************************************************************************/
-int main(void)
-{
-#if defined(HCI_TR_EXACTLE) && (HCI_TR_EXACTLE == 1)
+int main(void) {
     /* Configurations must be persistent. */
     static BbRtCfg_t mainBbRtCfg;
 
@@ -205,24 +124,22 @@ int main(void)
     mainBbRtCfg.clkPpm = 20;
 
     /* Set the default connection power level */
-    mainLlRtCfg.defTxPwrLvl = DEFAULT_TX_POWER;
-#endif
+    mainLlRtCfg.defTxPwrLvl = 0;
 
     uint32_t memUsed;
-    memUsed = WsfBufIoUartInit(WsfHeapGetFreeStartAddress(), PLATFORM_UART_TERMINAL_BUFFER_SIZE);
+    memUsed = WsfBufIoUartInit(WsfHeapGetFreeStartAddress(), 2048);
     WsfHeapAlloc(memUsed);
 
     mainWsfInit();
     AppTerminalInit();
 
-#if defined(HCI_TR_EXACTLE) && (HCI_TR_EXACTLE == 1)
-    LlInitRtCfg_t llCfg = { .pBbRtCfg = &mainBbRtCfg,
-                            .wlSizeCfg = 4,
-                            .rlSizeCfg = 4,
-                            .plSizeCfg = 4,
-                            .pLlRtCfg = &mainLlRtCfg,
-                            .pFreeMem = WsfHeapGetFreeStartAddress(),
-                            .freeMemAvail = WsfHeapCountAvailable() };
+    LlInitRtCfg_t llCfg = {.pBbRtCfg = &mainBbRtCfg,
+                           .wlSizeCfg = 4,
+                           .rlSizeCfg = 4,
+                           .plSizeCfg = 4,
+                           .pLlRtCfg = &mainLlRtCfg,
+                           .pFreeMem = WsfHeapGetFreeStartAddress(),
+                           .freeMemAvail = WsfHeapCountAvailable()};
 
     memUsed = LlInit(&llCfg);
     WsfHeapAlloc(memUsed);
@@ -240,11 +157,11 @@ int main(void)
     /* Execute the trim procedure */
     wutTrimComplete = 0;
     MXC_WUT_TrimCrystalAsync(wutTrimCb);
-    while (!wutTrimComplete) {}
+    while (!wutTrimComplete) {
+    }
 
     /* Shutdown the 32 MHz crystal and the BLE DBB */
     PalBbDisable();
-#endif
 
     StackInitFit();
     FitStart();
