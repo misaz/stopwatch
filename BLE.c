@@ -37,9 +37,6 @@
 #include <wsf_types.h>
 #include <wut.h>
 
-/* to remove */
-// #include "fit_api.h"
-
 static wsfBufPoolDesc_t poolDescriptions[] = {
     {.len = 16, .num = 8},
     {.len = 32, .num = 4},
@@ -49,40 +46,41 @@ static wsfBufPoolDesc_t poolDescriptions[] = {
 };
 
 static const smpCfg_t fitSmpCfg = {
-    500,                 /*! 'Repeated attempts' timeout in msec */
-    SMP_IO_NO_IN_NO_OUT, /*! I/O Capability */
-    7,                   /*! Minimum encryption key length */
-    16,                  /*! Maximum encryption key length */
-    1,                   /*! Attempts to trigger 'repeated attempts' timeout */
-    0,                   /*! Device authentication requirements */
-    64000,               /*! Maximum repeated attempts timeout in msec */
-    64000,               /*! Time msec before attemptExp decreases */
-    2,                   /*! Repeated attempts multiplier exponent */
+    .attemptTimeout = 500,
+    .ioCap = SMP_IO_NO_IN_NO_OUT,
+    .minKeyLen = 7,
+    .maxKeyLen = 16,
+    .maxAttempts = 1,
+    .auth = 0,
+    .maxAttemptTimeout = 64000,
+    .attemptDecTimeout = 64000,
+    .attemptExp = 2,
 };
 
 static const appAdvCfg_t fitAdvCfg = {
-    {60000, 0, 0}, /*! Advertising durations in ms */
-    {800, 0, 0},   /*! Advertising intervals in 0.625 ms units */
+    .advDuration = {60000, 0, 0},
+    .advInterval = {800, 0, 0},
 };
 
 static const appSlaveCfg_t fitSlaveCfg = {
-    .connMax = 1};
+    .connMax = 1,
+};
 
 static const appSecCfg_t fitSecCfg = {
-    DM_AUTH_BOND_FLAG | DM_AUTH_SC_FLAG, /*! Authentication and bonding flags */
-    0,                                   /*! Initiator key distribution flags */
-    DM_KEY_DIST_LTK,                     /*! Responder key distribution flags */
-    FALSE,                               /*! TRUE if Out-of-band pairing data is present */
-    TRUE,                                /*! TRUE to initiate security upon connection */
+    .auth = DM_AUTH_BOND_FLAG | DM_AUTH_SC_FLAG,
+    .iKeyDist = 0,
+    .rKeyDist = DM_KEY_DIST_LTK,
+    .oob = FALSE,
+    .initiateSec = TRUE,
 };
 
 static const appUpdateCfg_t fitUpdateCfg = {
-    6000, /*! Connection idle period in ms before attempting connection parameter update; set to zero to disable */
-    640,  /*! Minimum connection interval in 1.25ms units */
-    800,  /*! Maximum connection interval in 1.25ms units */
-    0,    /*! Connection latency */
-    900,  /*! Supervision timeout in 10ms units */
-    5,    /*! Number of update attempts before giving up */
+    .idlePeriod = 6000,
+    .connIntervalMin = 640,
+    .connIntervalMax = 800,
+    .connLatency = 0,
+    .supTimeout = 900,
+    .maxAttempts = 5,
 };
 
 static const uint8_t fitAdvDataDisc[] = {
