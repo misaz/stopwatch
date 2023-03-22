@@ -28,6 +28,7 @@
 #include <smp_handler.h>
 #include <svc_core.h>
 #include <trimsir_regs.h>
+#include <util/bstream.h>
 #include <wsf_buf.h>
 #include <wsf_bufio.h>
 #include <wsf_heap.h>
@@ -36,6 +37,18 @@
 #include <wsf_trace.h>
 #include <wsf_types.h>
 #include <wut.h>
+
+void wutTrimCb(int err);
+static void fitDmCback(dmEvt_t *pDmEvt);
+static void fitAttCback(attEvt_t *pEvt);
+static void fitCccCback(attsCccEvt_t *pEvt);
+static void BLE_Handler(wsfEventMask_t event, wsfMsgHdr_t *pMsg);
+static void BLE_Start();
+static void fitClose(wsfMsgHdr_t *msg);
+static void fitProcMsg(wsfMsgHdr_t *pMsg);
+static void fitProcCccState(wsfMsgHdr_t *msg);
+static void BLE_HandlerInit(wsfHandlerId_t handlerId);
+static uint8_t BLE_StopwatchWriteCallback(dmConnId_t connId, uint16_t handle, uint8_t operation, uint16_t offset, uint16_t len, uint8_t *pValue, attsAttr_t *pAttr);
 
 static wsfBufPoolDesc_t poolDescriptions[] = {
     {.len = 16, .num = 8},
@@ -111,8 +124,112 @@ static const uint8_t fitScanDataDisc[] = {
     't',
 };
 
+#define STOPWATCH_SERVICE_GUID 0x00, 0xca, 0x1f, 0x05, 0x95, 0x95, 0xf5, 0xd6, 0x21, 0x7c, 0xcc, 0x85, 0x88, 0x1e, 0x61, 0x2c
+#define STOPWATCH_STATUS_CHARACTERISTICS_GUID 0x01, 0xca, 0x1f, 0x05, 0x95, 0x95, 0xf5, 0xd6, 0x21, 0x7c, 0xcc, 0x85, 0x88, 0x1e, 0x61, 0x2c
+#define STOPWATCH_ELAPSED_CHARACTERISTICS_GUID 0x10, 0xca, 0x1f, 0x05, 0x95, 0x95, 0xf5, 0xd6, 0x21, 0x7c, 0xcc, 0x85, 0x88, 0x1e, 0x61, 0x2c
+#define STOPWATCH_LAP_COUNT_CHARACTERISTICS_GUID 0x20, 0xca, 0x1f, 0x05, 0x95, 0x95, 0xf5, 0xd6, 0x21, 0x7c, 0xcc, 0x85, 0x88, 0x1e, 0x61, 0x2c
+#define STOPWATCH_LAP_SELECT_CHARACTERISTICS_GUID 0x21, 0xca, 0x1f, 0x05, 0x95, 0x95, 0xf5, 0xd6, 0x21, 0x7c, 0xcc, 0x85, 0x88, 0x1e, 0x61, 0x2c
+#define STOPWATCH_LAP_TIME_CHARACTERISTICS_GUID 0x22, 0xca, 0x1f, 0x05, 0x95, 0x95, 0xf5, 0xd6, 0x21, 0x7c, 0xcc, 0x85, 0x88, 0x1e, 0x61, 0x2c
+
+#define STOPWATCH_HANDLE_OFFSET 1000
+
+enum {
+    STOPWATCH_SERVICE_HANDLE = STOPWATCH_HANDLE_OFFSET,
+
+    STOPWATCH_STATUS_CHARACTERISTICS_HANDLE,
+    STOPWATCH_STATUS_VALUE_HANDLE,
+    STOPWATCH_STATUS_CCC_HANDLE,
+
+    // STOPWATCH_ELAPSED_CHARACTERISTICS_HANDLE,
+    // STOPWATCH_ELAPSED_VALUE_HANDLE,
+    //
+    // STOPWATCH_LAP_COUNT_CHARACTERISTICS_HANDLE,
+    // STOPWATCH_LAP_COUNT_VALUE_HANDLE,
+    // STOPWATCH_LAP_COUNT_CCC_HANDLE,
+    //
+    // STOPWATCH_LAP_SELECT_CHARACTERISTICS_HANDLE,
+    // STOPWATCH_LAP_SELECT_VALUE_HANDLE,
+    //
+    // STOPWATCH_LAP_TIME_CHARACTERISTICS_HANDLE,
+    // STOPWATCH_LAP_TIME_VALUE_HANDLE,
+
+    STOPWATCH_LAST_HANDLE
+};
+
+static uint8_t stopwatchServiceGuid[ATT_128_UUID_LEN] = {STOPWATCH_SERVICE_GUID};
+static uint8_t stopwatchStatusCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_STATUS_CHARACTERISTICS_GUID};
+// static uint8_t stopwatchElapsedCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_ELAPSED_CHARACTERISTICS_GUID};
+// static uint8_t stopwatchLapCountCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_LAP_COUNT_CHARACTERISTICS_GUID};
+// static uint8_t stopwatchLapSelectCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_LAP_SELECT_CHARACTERISTICS_GUID};
+// static uint8_t stopwatchLapTimeCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_LAP_TIME_CHARACTERISTICS_GUID};
+
+static uint16_t stopwatchServiceGuidLength = sizeof(stopwatchServiceGuid);
+// static const uint16_t stopwatchElapsedCharacteristicsGuidLength = sizeof(stopwatchElapsedCharacteristicsGuid);
+// static const uint16_t stopwatchLapCountCharacteristicsGuidLength = sizeof(stopwatchLapCountCharacteristicsGuid);
+// static const uint16_t stopwatchLapSelectCharacteristicsGuidLength = sizeof(stopwatchLapSelectCharacteristicsGuid);
+// static const uint16_t stopwatchLapTimeCharacteristicsGuidLength = sizeof(stopwatchLapTimeCharacteristicsGuid);
+
+static uint8_t stopwatchStatusCharacteristicsValue[] = {
+    ATT_PROP_READ | ATT_PROP_NOTIFY,
+    UINT16_TO_BYTES(STOPWATCH_STATUS_VALUE_HANDLE),
+    STOPWATCH_STATUS_CHARACTERISTICS_GUID,
+};
+static uint16_t stopwatchStatusCharacteristicsValueLength = sizeof(stopwatchStatusCharacteristicsValue);
+static uint8_t stopwatchStatus = 0;
+static uint16_t stopwatchStatusLength = sizeof(stopwatchStatus);
+static uint8_t stopwatchStatusCcc[] = {UINT16_TO_BYTES(0x0000)};
+static uint16_t stopwatchStatusCccLength = sizeof(stopwatchStatusCcc);
+
+static attsAttr_t stopwatchAttributes[] = {
+    /* Service */
+    {
+        .pUuid = attPrimSvcUuid,
+        .pValue = stopwatchServiceGuid,
+        .pLen = &stopwatchServiceGuidLength,
+        .maxLen = sizeof(stopwatchServiceGuid),
+        .settings = 0,
+        .permissions = ATTS_PERMIT_READ,
+    },
+
+    /* Status characteristics */
+    {
+        .pUuid = attChUuid,
+        .pValue = stopwatchStatusCharacteristicsValue,
+        .pLen = &stopwatchStatusCharacteristicsValueLength,
+        .maxLen = sizeof(stopwatchStatusCharacteristicsValue),
+        .settings = 0,
+        .permissions = ATTS_PERMIT_READ,
+    },
+    {
+        .pUuid = stopwatchStatusCharacteristicsGuid,
+        .pValue = &stopwatchStatus,
+        .pLen = &stopwatchStatusLength,
+        .maxLen = sizeof(stopwatchStatus),
+        .settings = 0,
+        .permissions = ATTS_PERMIT_READ,
+    },
+    {
+        .pUuid = attCliChCfgUuid,
+        .pValue = stopwatchStatusCcc,
+        .pLen = &stopwatchStatusCccLength,
+        .maxLen = sizeof(stopwatchStatusCcc),
+        .settings = ATTS_SET_CCC,
+        .permissions = ATTS_PERMIT_READ | ATTS_PERMIT_WRITE,
+    },
+};
+
+static attsGroup_t stopwatchGroup = {
+    .pNext = NULL,
+    .pAttr = stopwatchAttributes,
+    .readCback = NULL,
+    .writeCback = BLE_StopwatchWriteCallback,
+    .startHandle = STOPWATCH_HANDLE_OFFSET,
+    .endHandle = STOPWATCH_LAST_HANDLE,
+};
+
 enum {
     GATT_SC_CCC_IDX,
+    STOPWATCH_STATUS_IDX,
     NUM_CCC_IDX
 };
 
@@ -122,23 +239,17 @@ static const attsCccSet_t fitCccSet[NUM_CCC_IDX] = {
         .valueRange = ATT_CLIENT_CFG_INDICATE,
         .secLevel = DM_SEC_LEVEL_NONE,
     },
+    {
+        .handle = STOPWATCH_STATUS_CCC_HANDLE,
+        .valueRange = ATT_CLIENT_CFG_NOTIFY,
+        .secLevel = DM_SEC_LEVEL_NONE,
+    },
 };
 
 static LlRtCfg_t mainLlRtCfg;
 static volatile int wutTrimComplete;
 
 wsfHandlerId_t bleHandlerId;
-
-void wutTrimCb(int err);
-static void fitDmCback(dmEvt_t *pDmEvt);
-static void fitAttCback(attEvt_t *pEvt);
-static void fitCccCback(attsCccEvt_t *pEvt);
-static void BLE_Handler(wsfEventMask_t event, wsfMsgHdr_t *pMsg);
-static void BLE_Start();
-static void fitClose(wsfMsgHdr_t *msg);
-static void fitProcMsg(wsfMsgHdr_t *pMsg);
-static void fitProcCccState(wsfMsgHdr_t *msg);
-static void BLE_HandlerInit(wsfHandlerId_t handlerId);
 
 static void BLE_InitWsf(void) {
     /* +12 for message headroom, + 2 event header, +255 maximum parameter length. */
@@ -335,6 +446,8 @@ static void BLE_Start() {
     SvcCoreGattCbackRegister(GattReadCback, GattWriteCback);
     SvcCoreAddGroup();
 
+    AttsAddGroup(&stopwatchGroup);
+
     /* Set Service Changed CCCD index. */
     GattSetSvcChangedIdx(GATT_SC_CCC_IDX);
 
@@ -459,4 +572,11 @@ static void fitClose(wsfMsgHdr_t *msg) {
 static void fitProcCccState(wsfMsgHdr_t *msg) {
     attsCccEvt_t *ccce = (attsCccEvt_t *)msg;
     APP_TRACE_INFO3("ccc state ind value:%d handle:%d idx:%d", ccce->value, ccce->handle, ccce->idx);
+}
+
+static uint8_t BLE_StopwatchWriteCallback(dmConnId_t connId, uint16_t handle, uint8_t operation, uint16_t offset, uint16_t len, uint8_t *pValue, attsAttr_t *pAttr) {
+    APP_TRACE_INFO0("BLE_StopwatchWriteCallback");
+
+    AttsSetAttr(handle, 1, pValue);
+    return ATT_SUCCESS;
 }
