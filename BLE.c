@@ -140,9 +140,9 @@ enum {
     STOPWATCH_STATUS_VALUE_HANDLE,
     STOPWATCH_STATUS_CCC_HANDLE,
 
-    // STOPWATCH_ELAPSED_CHARACTERISTICS_HANDLE,
-    // STOPWATCH_ELAPSED_VALUE_HANDLE,
-    //
+    STOPWATCH_ELAPSED_CHARACTERISTICS_HANDLE,
+    STOPWATCH_ELAPSED_VALUE_HANDLE,
+
     // STOPWATCH_LAP_COUNT_CHARACTERISTICS_HANDLE,
     // STOPWATCH_LAP_COUNT_VALUE_HANDLE,
     // STOPWATCH_LAP_COUNT_CCC_HANDLE,
@@ -158,16 +158,12 @@ enum {
 
 static uint8_t stopwatchServiceGuid[ATT_128_UUID_LEN] = {STOPWATCH_SERVICE_GUID};
 static uint8_t stopwatchStatusCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_STATUS_CHARACTERISTICS_GUID};
-// static uint8_t stopwatchElapsedCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_ELAPSED_CHARACTERISTICS_GUID};
+static uint8_t stopwatchElapsedCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_ELAPSED_CHARACTERISTICS_GUID};
 // static uint8_t stopwatchLapCountCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_LAP_COUNT_CHARACTERISTICS_GUID};
 // static uint8_t stopwatchLapSelectCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_LAP_SELECT_CHARACTERISTICS_GUID};
 // static uint8_t stopwatchLapTimeCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_LAP_TIME_CHARACTERISTICS_GUID};
 
 static uint16_t stopwatchServiceGuidLength = sizeof(stopwatchServiceGuid);
-// static const uint16_t stopwatchElapsedCharacteristicsGuidLength = sizeof(stopwatchElapsedCharacteristicsGuid);
-// static const uint16_t stopwatchLapCountCharacteristicsGuidLength = sizeof(stopwatchLapCountCharacteristicsGuid);
-// static const uint16_t stopwatchLapSelectCharacteristicsGuidLength = sizeof(stopwatchLapSelectCharacteristicsGuid);
-// static const uint16_t stopwatchLapTimeCharacteristicsGuidLength = sizeof(stopwatchLapTimeCharacteristicsGuid);
 
 static uint8_t stopwatchStatusCharacteristicsValue[] = {
     ATT_PROP_READ | ATT_PROP_NOTIFY,
@@ -179,6 +175,15 @@ static uint8_t stopwatchStatus = 0;
 static uint16_t stopwatchStatusLength = sizeof(stopwatchStatus);
 static uint8_t stopwatchStatusCcc[] = {UINT16_TO_BYTES(0x0000)};
 static uint16_t stopwatchStatusCccLength = sizeof(stopwatchStatusCcc);
+
+static uint8_t stopwatchElapsedCharacteristicsValue[] = {
+    ATT_PROP_READ,
+    UINT16_TO_BYTES(STOPWATCH_ELAPSED_VALUE_HANDLE),
+    STOPWATCH_ELAPSED_CHARACTERISTICS_GUID,
+};
+static uint16_t stopwatchElapsedCharacteristicsValueLength = sizeof(stopwatchElapsedCharacteristicsValue);
+static uint32_t stopwatchElapsed = 0;
+static uint16_t stopwatchElapsedLength = sizeof(stopwatchElapsed);
 
 static attsAttr_t stopwatchAttributes[] = {
     /* Service */
@@ -216,6 +221,24 @@ static attsAttr_t stopwatchAttributes[] = {
         .settings = ATTS_SET_CCC,
         .permissions = ATTS_PERMIT_READ | ATTS_PERMIT_WRITE,
     },
+
+    /* Elapsed characteristics */
+    {
+        .pUuid = attChUuid,
+        .pValue = stopwatchElapsedCharacteristicsValue,
+        .pLen = &stopwatchElapsedCharacteristicsValueLength,
+        .maxLen = sizeof(stopwatchElapsedCharacteristicsValue),
+        .settings = 0,
+        .permissions = ATTS_PERMIT_READ,
+    },
+    {
+        .pUuid = stopwatchElapsedCharacteristicsGuid,
+        .pValue = (uint8_t *)&stopwatchElapsed,
+        .pLen = &stopwatchElapsedLength,
+        .maxLen = sizeof(stopwatchElapsed),
+        .settings = 0,
+        .permissions = ATTS_PERMIT_READ,
+    },
 };
 
 static attsGroup_t stopwatchGroup = {
@@ -224,7 +247,7 @@ static attsGroup_t stopwatchGroup = {
     .readCback = NULL,
     .writeCback = BLE_StopwatchWriteCallback,
     .startHandle = STOPWATCH_HANDLE_OFFSET,
-    .endHandle = STOPWATCH_LAST_HANDLE,
+    .endHandle = STOPWATCH_LAST_HANDLE - 1,
 };
 
 enum {
