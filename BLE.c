@@ -139,19 +139,24 @@ enum {
     STOPWATCH_STATUS_CHARACTERISTICS_HANDLE,
     STOPWATCH_STATUS_VALUE_HANDLE,
     STOPWATCH_STATUS_CCC_HANDLE,
+    STOPWATCH_STATUS_CHARACTERISTICS_NAME_HANDLE,
 
     STOPWATCH_ELAPSED_CHARACTERISTICS_HANDLE,
     STOPWATCH_ELAPSED_VALUE_HANDLE,
+    STOPWATCH_ELAPSED_CHARACTERISTICS_NAME_HANDLE,
 
     STOPWATCH_LAPS_COUNT_CHARACTERISTICS_HANDLE,
     STOPWATCH_LAPS_COUNT_VALUE_HANDLE,
     STOPWATCH_LAPS_COUNT_CCC_HANDLE,
+    STOPWATCH_LAPS_COUNT_CHARACTERISTICS_NAME_HANDLE,
 
     STOPWATCH_LAP_SELECT_CHARACTERISTICS_HANDLE,
     STOPWATCH_LAP_SELECT_VALUE_HANDLE,
+    STOPWATCH_LAP_SELECT_CHARACTERISTICS_NAME_HANDLE,
 
     STOPWATCH_LAP_TIME_CHARACTERISTICS_HANDLE,
     STOPWATCH_LAP_TIME_VALUE_HANDLE,
+    STOPWATCH_LAP_TIME_CHARACTERISTICS_NAME_HANDLE,
 
     STOPWATCH_LAST_HANDLE
 };
@@ -164,6 +169,21 @@ static uint8_t stopwatchLapSelectCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWA
 static uint8_t stopwatchLapTimeCharacteristicsGuid[ATT_128_UUID_LEN] = {STOPWATCH_LAP_TIME_CHARACTERISTICS_GUID};
 
 static uint16_t stopwatchServiceGuidLength = sizeof(stopwatchServiceGuid);
+
+static uint8_t stopwatchStatusName[] = {'S', 't', 'a', 't', 'u', 's'};
+static uint16_t stopwatchStatusNameLength = sizeof(stopwatchStatusName);
+
+static uint8_t stopwatchElapsedName[] = {'E', 'l', 'a', 'p', 's', 'e', 'd', ' ', 'T', 'i', 'm', 'e'};
+static uint16_t stopwatchElapsedNameLength = sizeof(stopwatchElapsedName);
+
+static uint8_t stopwatchLapsCountName[] = {'L', 'a', 'p', 's', ' ', 'C', 'o', 'u', 'n', 't'};
+static uint16_t stopwatchLapsCountNameLength = sizeof(stopwatchLapsCountName);
+
+static uint8_t stopwatchLapSelectName[] = {'L', 'a', 'p', ' ', 'S', 'e', 'l', 'e', 'c', 't'};
+static uint16_t stopwatchLapSelectNameLength = sizeof(stopwatchLapSelectName);
+
+static uint8_t stopwatchLapTimeName[] = {'L', 'a', 'p', ' ', 'T', 'i', 'm', 'e'};
+static uint16_t stopwatchLapTimeNameLength = sizeof(stopwatchLapTimeName);
 
 static uint8_t stopwatchStatusCharacteristicsValue[] = {
     ATT_PROP_READ | ATT_PROP_NOTIFY,
@@ -250,6 +270,14 @@ static attsAttr_t stopwatchAttributes[] = {
         .settings = ATTS_SET_CCC,
         .permissions = ATTS_PERMIT_READ | ATTS_PERMIT_WRITE,
     },
+    {
+        .pUuid = attChUserDescUuid,
+        .pValue = stopwatchStatusName,
+        .pLen = &stopwatchStatusNameLength,
+        .maxLen = sizeof(stopwatchStatusName),
+        .settings = 0,
+        .permissions = ATTS_PERMIT_READ,
+    },
 
     /* Elapsed characteristics */
     {
@@ -265,6 +293,14 @@ static attsAttr_t stopwatchAttributes[] = {
         .pValue = (uint8_t *)&stopwatchElapsed,
         .pLen = &stopwatchElapsedLength,
         .maxLen = sizeof(stopwatchElapsed),
+        .settings = 0,
+        .permissions = ATTS_PERMIT_READ,
+    },
+    {
+        .pUuid = attChUserDescUuid,
+        .pValue = stopwatchElapsedName,
+        .pLen = &stopwatchElapsedNameLength,
+        .maxLen = sizeof(stopwatchElapsedName),
         .settings = 0,
         .permissions = ATTS_PERMIT_READ,
     },
@@ -294,6 +330,14 @@ static attsAttr_t stopwatchAttributes[] = {
         .settings = ATTS_SET_CCC,
         .permissions = ATTS_PERMIT_READ | ATTS_PERMIT_WRITE,
     },
+    {
+        .pUuid = attChUserDescUuid,
+        .pValue = stopwatchLapsCountName,
+        .pLen = &stopwatchLapsCountNameLength,
+        .maxLen = sizeof(stopwatchLapsCountName),
+        .settings = 0,
+        .permissions = ATTS_PERMIT_READ,
+    },
 
     /* Laps select characteristics */
     {
@@ -312,6 +356,14 @@ static attsAttr_t stopwatchAttributes[] = {
         .settings = ATTS_SET_WRITE_CBACK,
         .permissions = ATTS_PERMIT_READ | ATTS_PERMIT_WRITE,
     },
+    {
+        .pUuid = attChUserDescUuid,
+        .pValue = stopwatchLapSelectName,
+        .pLen = &stopwatchLapSelectNameLength,
+        .maxLen = sizeof(stopwatchLapSelectName),
+        .settings = 0,
+        .permissions = ATTS_PERMIT_READ,
+    },
 
     /* Laps time characteristics */
     {
@@ -327,6 +379,14 @@ static attsAttr_t stopwatchAttributes[] = {
         .pValue = (uint8_t *)&stopwatchLapTime,
         .pLen = &stopwatchLapTimeLength,
         .maxLen = sizeof(stopwatchLapTime),
+        .settings = 0,
+        .permissions = ATTS_PERMIT_READ,
+    },
+    {
+        .pUuid = attChUserDescUuid,
+        .pValue = stopwatchLapTimeName,
+        .pLen = &stopwatchLapTimeNameLength,
+        .maxLen = sizeof(stopwatchLapTimeName),
         .settings = 0,
         .permissions = ATTS_PERMIT_READ,
     },
