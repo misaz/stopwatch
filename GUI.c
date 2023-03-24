@@ -1,9 +1,12 @@
-/* project */
+/* self */
 #include "GUI.h"
 
+/* project */
+#include "Button.h"
 #include "Display.h"
 
 /* sdtlib */
+#include <stdio.h>
 #include <string.h>
 
 /* max32655 + mbed + cordio */
@@ -17,14 +20,12 @@ static wsfHandlerId_t guiTimerHandler;
 
 static int i = 0;
 
+static int buttonPresses[BUTTON_COUNT];
+
 static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
     if (pMsg == NULL || pMsg->event != GUI_TIMER_TICK_EVENT) {
         return;
     }
-
-    Display_Clear();
-    Display_PrintString(10, i, "ahoj");
-    Display_Show();
 
     i = (i + 1) % 6;
 
@@ -39,4 +40,23 @@ void GUI_Init() {
     guiTimer.msg.param = 0;
     guiTimer.msg.status = 0;
     WsfTimerStartMs(&guiTimer, 330);
+}
+
+void GUI_HandleButtonPress(int buttonNumber, uint32_t pressTime) {
+    char buffer[32];
+
+    buttonPresses[buttonNumber]++;
+
+    Display_Clear();
+
+    snprintf(buffer, sizeof(buffer), "RIGHT: %d", buttonPresses[0]);
+    Display_PrintString(0, 1, buffer);
+
+    snprintf(buffer, sizeof(buffer), "LEFT: %d", buttonPresses[1]);
+    Display_PrintString(0, 2, buffer);
+
+    snprintf(buffer, sizeof(buffer), "MENU: %d", buttonPresses[2]);
+    Display_PrintString(0, 3, buffer);
+
+    Display_Show();
 }

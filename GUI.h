@@ -1,6 +1,9 @@
 #ifndef GUI_H
 #define GUI_H
 
+#include <stdint.h>
+
 void GUI_Init();
+void GUI_HandleButtonPress(int buttonNumber, uint32_t pressTime);
 
 #endif
