@@ -105,16 +105,20 @@ static wsfTimer_t displayOpTimer;
 static enum {
     DISPLAY_STATE_UNINITIALIZED,
     DISPLAY_STATE_INIT_COMMANDS,
-    DISPLAY_STATE_SEND_PREAMBLE,
+    DISPLAY_STATE_SEND_BUFFER_COMMANDS,
     DISPLAY_STATE_SEND_BUFFER,
     DISPLAY_STATE_IDLE
 } currentState = DISPLAY_STATE_UNINITIALIZED;
+
+static int isI2CActive = 0;
+static int lastTransactionStatus = 0;
 
 // The same I2C2_IRQHandler is defined in BLE stack (pal_twi.c)
 // void I2C2_IRQHandler() {
 //     MXC_I2C_AsyncHandler(DISPLAY_I2C);
 // }
 
+static void Display_InitI2C();
 static void Display_TransmitNextConfigCommand();
 static void Display_TransmitNextSendBufferCommand();
 static void Display_TransmitScreenData();
@@ -126,78 +130,8 @@ static void Display_SwapBuffers(uint8_t **b1, uint8_t **b2) {
 }
 
 static void Display_CompletionCallback(mxc_i2c_req_t *req, int result) {
-}
-
-static void Display_ConfigCommandCompletionCallback(mxc_i2c_req_t *req, int result) {
-    APP_TRACE_INFO1("Display_ConfigCommandCompletionCallback result=%d", result);
-
-    if (result == 0) {
-        configCommandsToExecute++;
-        if (configCommandsToExecute < configCommandsEnd) {
-            Display_TransmitNextConfigCommand();
-        } else {
-            if (isTransmitRequested) {
-                isTransmitRequested = 0;
-                Display_SwapBuffers(&transmitBuffer, &readyBuffer);
-                sendBufferCommandToExecute = sendBufferCommands;
-                Display_TransmitNextSendBufferCommand();
-            } else {
-                APP_TRACE_INFO0("Display I2C is now idle");
-                isIdle = 1;
-            }
-        }
-    } else {
-        // error happended
-        configCommandsToExecute = configCommands;
-        Display_TransmitNextConfigCommand();
-    }
-}
-
-static void Display_NextSendBufferCompletionCallback(mxc_i2c_req_t *req, int result) {
-    APP_TRACE_INFO1("Display_NextSendBufferCompletionCallback result=%d", result);
-
-    if (result == 0) {
-        sendBufferCommandToExecute++;
-        if (sendBufferCommandToExecute < sendBufferCommandsEnd) {
-            Display_TransmitNextSendBufferCommand();
-        } else if (sendBufferCommandToExecute == sendBufferCommandsEnd) {
-            Display_TransmitScreenData();
-        } else {
-            if (isTransmitRequested) {
-                isTransmitRequested = 0;
-                Display_SwapBuffers(&transmitBuffer, &readyBuffer);
-                sendBufferCommandToExecute = sendBufferCommands;
-                Display_TransmitNextSendBufferCommand();
-            } else {
-                APP_TRACE_INFO0("Display I2C is now idle");
-                isIdle = 1;
-            }
-        }
-    } else {
-        // error happended
-        configCommandsToExecute = configCommands;
-        Display_TransmitNextConfigCommand();
-    }
-}
-
-static void Display_BufferCompletionCallback(mxc_i2c_req_t *req, int result) {
-    APP_TRACE_INFO1("Display_BufferCompletionCallback result=%d", result);
-
-    if (result == 0) {
-        if (isTransmitRequested) {
-            isTransmitRequested = 0;
-            Display_SwapBuffers(&transmitBuffer, &readyBuffer);
-            sendBufferCommandToExecute = sendBufferCommands;
-            Display_TransmitNextSendBufferCommand();
-        } else {
-            APP_TRACE_INFO0("Display I2C is now idle");
-            isIdle = 1;
-        }
-    } else {
-        // error happended
-        configCommandsToExecute = configCommands;
-        Display_TransmitNextConfigCommand();
-    }
+    lastTransactionStatus = result;
+    isI2CActive = 0;
 }
 
 static void Display_TransmitNextConfigCommand() {
@@ -209,7 +143,8 @@ static void Display_TransmitNextConfigCommand() {
 
     i2cRequest.tx_buf = commandBuffer;
     i2cRequest.tx_len = sizeof(commandBuffer);
-    i2cRequest.callback = Display_ConfigCommandCompletionCallback;
+
+    isI2CActive = 1;
 
     status = MXC_I2C_MasterTransactionAsync(&i2cRequest);
     if (status) {
@@ -226,7 +161,8 @@ static void Display_TransmitNextSendBufferCommand() {
 
     i2cRequest.tx_buf = commandBuffer;
     i2cRequest.tx_len = sizeof(commandBuffer);
-    i2cRequest.callback = Display_NextSendBufferCompletionCallback;
+
+    isI2CActive = 1;
 
     status = MXC_I2C_MasterTransactionAsync(&i2cRequest);
     if (status) {
@@ -240,7 +176,8 @@ static void Display_TransmitScreenData() {
 
     i2cRequest.tx_buf = transmitBuffer - 1;
     i2cRequest.tx_len = sizeof(buffer1);
-    i2cRequest.callback = Display_BufferCompletionCallback;
+
+    isI2CActive = 1;
 
     status = MXC_I2C_MasterTransactionAsync(&i2cRequest);
     if (status) {
@@ -249,40 +186,68 @@ static void Display_TransmitScreenData() {
 }
 
 static void Display_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
-    if (pMsg && pMsg->event == DISPLAY_TIMER_TICK_EVENT) {
-        APP_TRACE_INFO0("tick");
-        WsfTimerStartMs(&displayOpTimer, 250);
+    if (pMsg == NULL || pMsg->event != DISPLAY_TIMER_TICK_EVENT) {
+        return;
     }
+
+    if (currentState == DISPLAY_STATE_UNINITIALIZED) {
+        Display_InitI2C();
+    } else if (currentState == DISPLAY_STATE_INIT_COMMANDS && !isI2CActive) {
+        if (lastTransactionStatus == 0) {
+            if (configCommandsToExecute < configCommandsEnd) {
+                Display_TransmitNextConfigCommand();
+                configCommandsToExecute++;
+            } else {
+                if (isTransmitRequested) {
+                    sendBufferCommandToExecute = sendBufferCommands;
+                    currentState = DISPLAY_STATE_SEND_BUFFER_COMMANDS;
+                    Display_TransmitNextSendBufferCommand();
+                } else {
+                    currentState = DISPLAY_STATE_IDLE;
+                }
+            }
+        } else {
+            configCommandsToExecute = configCommands;
+            currentState = DISPLAY_STATE_INIT_COMMANDS;
+            Display_TransmitNextConfigCommand();
+        }
+    } else if (currentState == DISPLAY_STATE_SEND_BUFFER_COMMANDS && !isI2CActive) {
+        if (lastTransactionStatus == 0) {
+            if (sendBufferCommandToExecute < sendBufferCommandsEnd) {
+                Display_TransmitNextSendBufferCommand();
+                sendBufferCommandToExecute++;
+            } else {
+                currentState = DISPLAY_STATE_SEND_BUFFER;
+                Display_TransmitScreenData();
+            }
+        } else {
+            configCommandsToExecute = configCommands;
+            currentState = DISPLAY_STATE_INIT_COMMANDS;
+            Display_TransmitNextConfigCommand();
+        }
+    } else if (currentState == DISPLAY_STATE_SEND_BUFFER && !isI2CActive) {
+        if (lastTransactionStatus == 0) {
+            if (isTransmitRequested) {
+                isTransmitRequested = 0;
+
+                sendBufferCommandToExecute = sendBufferCommands;
+                currentState = DISPLAY_STATE_SEND_BUFFER_COMMANDS;
+                Display_TransmitNextSendBufferCommand();
+            } else {
+                currentState = DISPLAY_STATE_IDLE;
+            }
+        } else {
+            configCommandsToExecute = configCommands;
+            currentState = DISPLAY_STATE_INIT_COMMANDS;
+            Display_TransmitNextConfigCommand();
+        }
+    }
+
+    WsfTimerStartMs(&displayOpTimer, 1);
 }
 
 void Display_Init() {
     APP_TRACE_INFO0("Display_Init");
-    int status;
-
-    i2cRequest.addr = DISPLAY_I2C_ADDRESS;
-    i2cRequest.i2c = DISPLAY_I2C;
-    i2cRequest.restart = 0;
-    i2cRequest.rx_buf = NULL;
-    i2cRequest.rx_len = 0;
-
-    isIdle = 0;
-
-    status = MXC_I2C_Init(DISPLAY_I2C, 1, 0);
-    if (status) {
-        APP_TRACE_ERR1("Display_Init: MXC_I2C_Init failed=%d", status);
-        return;
-    }
-
-    MXC_GPIO_SetVSSEL(DISPLAY_I2C_SDA_GPIO, MXC_GPIO_VSSEL_VDDIOH, DISPLAY_I2C_SDA_GPIO_PIN);
-    MXC_GPIO_SetVSSEL(DISPLAY_I2C_SCL_GPIO, MXC_GPIO_VSSEL_VDDIOH, DISPLAY_I2C_SCL_GPIO_PIN);
-
-    status = MXC_I2C_SetFrequency(DISPLAY_I2C, 100000);
-    if (status < 0) {
-        APP_TRACE_ERR1("Display_Init: MXC_I2C_SetFrequency failed=%d", status);
-        return;
-    }
-
-    isInitialized = 1;
 
     displayOpTimerHandler = WsfOsSetNextHandler(Display_TimerHandler);
     displayOpTimer.handlerId = displayOpTimerHandler;
@@ -292,8 +257,42 @@ void Display_Init() {
     WsfTimerStartMs(&displayOpTimer, 250);
 
     APP_TRACE_INFO0("Display_Init: Initialization successfull");
+}
 
-    Display_TransmitNextConfigCommand();
+static void Display_InitI2C() {
+    int status;
+
+    APP_TRACE_INFO0("Display_InitI2C");
+
+    i2cRequest.addr = DISPLAY_I2C_ADDRESS;
+    i2cRequest.i2c = DISPLAY_I2C;
+    i2cRequest.restart = 0;
+    i2cRequest.rx_buf = NULL;
+    i2cRequest.rx_len = 0;
+    i2cRequest.callback = Display_CompletionCallback;
+
+    isIdle = 0;
+
+    status = MXC_I2C_Init(DISPLAY_I2C, 1, 0);
+    if (status) {
+        APP_TRACE_ERR1("Display_InitI2C: MXC_I2C_Init failed=%d", status);
+        return;
+    }
+
+    MXC_GPIO_SetVSSEL(DISPLAY_I2C_SDA_GPIO, MXC_GPIO_VSSEL_VDDIOH, DISPLAY_I2C_SDA_GPIO_PIN);
+    MXC_GPIO_SetVSSEL(DISPLAY_I2C_SCL_GPIO, MXC_GPIO_VSSEL_VDDIOH, DISPLAY_I2C_SCL_GPIO_PIN);
+
+    status = MXC_I2C_SetFrequency(DISPLAY_I2C, 100000);
+    if (status < 0) {
+        APP_TRACE_ERR1("Display_InitI2C: MXC_I2C_SetFrequency failed=%d", status);
+        return;
+    }
+
+    isI2CActive = 0;
+    configCommandsToExecute = configCommands;
+    currentState = DISPLAY_STATE_INIT_COMMANDS;
+
+    APP_TRACE_INFO0("Display_InitI2C: Success");
 }
 
 void Display_Show() {
