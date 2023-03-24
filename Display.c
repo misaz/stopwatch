@@ -59,6 +59,7 @@ static uint8_t configCommands[] = {
     0xA1,
     0xC8,  // Set COM Output Scan Direction
     0xDA,  // Set COM Hardware Configuration
+    0x12,
     0x81,  // Set Contrast Control
     0xff,
     0xD9,  // Set Pre-Charge period
@@ -93,7 +94,6 @@ static uint8_t *workingBuffer = buffer1 + 1;
 static uint8_t *readyBuffer = buffer2 + 1;
 static uint8_t *transmitBuffer = buffer3 + 1;
 
-static int isInitialized = 0;
 static int isTransmitRequested = 0;
 static int isIdle = 1;
 
@@ -127,6 +127,11 @@ static void Display_SwapBuffers(uint8_t **b1, uint8_t **b2) {
     uint8_t *temp = *b1;
     *b1 = *b2;
     *b2 = temp;
+
+    APP_TRACE_INFO0("Buffers swapped. New state:");
+    APP_TRACE_INFO1("working buffer = %p", workingBuffer);
+    APP_TRACE_INFO1("readyBuffer buffer = %p", readyBuffer);
+    APP_TRACE_INFO1("transmitBuffer buffer = %p", transmitBuffer);
 }
 
 static void Display_CompletionCallback(mxc_i2c_req_t *req, int result) {
@@ -199,9 +204,10 @@ static void Display_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
                 configCommandsToExecute++;
             } else {
                 if (isTransmitRequested) {
+                    isTransmitRequested = 0;
+                    Display_SwapBuffers(&transmitBuffer, &readyBuffer);
                     sendBufferCommandToExecute = sendBufferCommands;
                     currentState = DISPLAY_STATE_SEND_BUFFER_COMMANDS;
-                    Display_TransmitNextSendBufferCommand();
                 } else {
                     currentState = DISPLAY_STATE_IDLE;
                 }
@@ -209,7 +215,6 @@ static void Display_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
         } else {
             configCommandsToExecute = configCommands;
             currentState = DISPLAY_STATE_INIT_COMMANDS;
-            Display_TransmitNextConfigCommand();
         }
     } else if (currentState == DISPLAY_STATE_SEND_BUFFER_COMMANDS && !isI2CActive) {
         if (lastTransactionStatus == 0) {
@@ -223,23 +228,27 @@ static void Display_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
         } else {
             configCommandsToExecute = configCommands;
             currentState = DISPLAY_STATE_INIT_COMMANDS;
-            Display_TransmitNextConfigCommand();
         }
     } else if (currentState == DISPLAY_STATE_SEND_BUFFER && !isI2CActive) {
         if (lastTransactionStatus == 0) {
             if (isTransmitRequested) {
                 isTransmitRequested = 0;
-
+                Display_SwapBuffers(&transmitBuffer, &readyBuffer);
                 sendBufferCommandToExecute = sendBufferCommands;
                 currentState = DISPLAY_STATE_SEND_BUFFER_COMMANDS;
-                Display_TransmitNextSendBufferCommand();
             } else {
                 currentState = DISPLAY_STATE_IDLE;
             }
         } else {
             configCommandsToExecute = configCommands;
             currentState = DISPLAY_STATE_INIT_COMMANDS;
-            Display_TransmitNextConfigCommand();
+        }
+    } else if (currentState == DISPLAY_STATE_IDLE) {
+        if (isTransmitRequested) {
+            isTransmitRequested = 0;
+            Display_SwapBuffers(&transmitBuffer, &readyBuffer);
+            sendBufferCommandToExecute = sendBufferCommands;
+            currentState = DISPLAY_STATE_SEND_BUFFER_COMMANDS;
         }
     }
 
@@ -292,41 +301,26 @@ static void Display_InitI2C() {
     configCommandsToExecute = configCommands;
     currentState = DISPLAY_STATE_INIT_COMMANDS;
 
+    NVIC_SetPriority(DISPLAY_I2C_IRQn, 3);
+    NVIC_ClearPendingIRQ(DISPLAY_I2C_IRQn);
+    NVIC_EnableIRQ(DISPLAY_I2C_IRQn);
+
     APP_TRACE_INFO0("Display_InitI2C: Success");
 }
 
 void Display_Show() {
-    APP_TRACE_INFO0("Display_Show");
-    if (!isInitialized) {
-        APP_TRACE_INFO0("Display_Show: Initializing");
-        Display_Init();
-        if (!isInitialized) {
-            return;
-        }
-    }
-
-    NVIC_DisableIRQ(DISPLAY_I2C_IRQn);
-
     Display_SwapBuffers(&workingBuffer, &readyBuffer);
-
     isTransmitRequested = 1;
-    if (isIdle) {
-        Display_SwapBuffers(&transmitBuffer, &readyBuffer);
-
-        sendBufferCommandToExecute = sendBufferCommands;
-        Display_TransmitNextSendBufferCommand();
-    }
-    NVIC_EnableIRQ(DISPLAY_I2C_IRQn);
 }
 
 void Display_Clear() {
-    for (int i = 0; i < 64 * 6; i++) {
+    for (int i = 0; i < DISPLAY_WIDTH * DISPLAY_LINES; i++) {
         workingBuffer[i] = 0x00;
     }
 }
 
 void Display_SetPixelBuffer(int x, int row, uint8_t value) {
-    workingBuffer[row * 64 + x] = value;
+    workingBuffer[row * DISPLAY_WIDTH + x] = value;
 }
 
 int Display_PrintChar(int x, int row, char ch) {
