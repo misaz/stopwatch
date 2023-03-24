@@ -11,4 +11,4 @@
 LIB_CORDIO = 1
 
 # Optimize for size
-MXC_OPTIMIZE_CFLAGS = -Os
+MXC_OPTIMIZE_CFLAGS = -Og

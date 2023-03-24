@@ -1,5 +1,6 @@
 /* project */
 #include "BLE.h"
+#include "Display.h"
 
 /* sdtlib */
 #include <string.h>
@@ -9,6 +10,7 @@
 
 int main(void) {
     BLE_Init();
+    Display_Init();
 
     WsfOsEnterMainLoop();
 
