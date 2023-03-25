@@ -18,9 +18,6 @@
 #define DISPLAY_I2C_SCL_GPIO MXC_GPIO0
 #define DISPLAY_I2C_SCL_GPIO_PIN MXC_GPIO_PIN_30
 
-#define DISPLAY_WIDTH 64
-#define DISPLAY_LINES 6
-
 #define DISPLAY_TIMER_TICK_EVENT 0xFA
 
 static uint8_t fontDefinition[] = {
@@ -323,6 +320,14 @@ void Display_SetPixelBuffer(int x, int row, uint8_t value) {
     workingBuffer[row * DISPLAY_WIDTH + x] = value;
 }
 
+void Display_OrPixelBuffer(int x, int row, uint8_t value) {
+    workingBuffer[row * DISPLAY_WIDTH + x] |= value;
+}
+
+void Display_InvertPixelBuffer(int x, int row, uint8_t value) {
+    workingBuffer[row * DISPLAY_WIDTH + x] ^= 0xFF;
+}
+
 int Display_PrintChar(int x, int row, char ch) {
     if (ch == ':') {
         Display_SetPixelBuffer(x, row, 0x0A);
@@ -349,10 +354,40 @@ int Display_PrintChar(int x, int row, char ch) {
     return x;
 }
 
+int Display_GetCharLength(char ch) {
+    if (ch == ':') {
+        return 2;
+    }
+
+    if (ch >= 'a' && ch <= 'z') {
+        ch -= 32;
+    }
+
+    if ((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z')) {
+        ch -= 48;
+
+        size_t startIndex = fondIndexTable[(unsigned char)ch];
+        size_t endIndex = fondIndexTable[ch + 1];
+
+        return endIndex - startIndex + 1;
+    }
+
+    return 0;
+}
+
 int Display_PrintString(int x, int row, char *str) {
     while (*str) {
         x = Display_PrintChar(x, row, *str);
         str++;
     }
     return x;
+}
+
+int Display_GetStringLength(char *str) {
+    int len = 0;
+    while (*str) {
+        len += Display_GetCharLength(*str);
+        str++;
+    }
+    return len;
 }
