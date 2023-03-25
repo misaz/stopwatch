@@ -65,27 +65,51 @@ static const uint8_t closeIcon[] = {
     0,
 };
 
-#define GUI_MENU_POS 2
-#define GUI_BAT_POS 64 - 4
-#define GUI_BLE_POS 64 - 14
+#define GUI_MENU_POS 0
+#define GUI_STATUS_POS (sizeof(menuIcon) + 2)
+#define GUI_BAT_POS (DISPLAY_WIDTH - sizeof(batIcon))
+#define GUI_BLE_POS (DISPLAY_WIDTH - sizeof(batIcon) - sizeof(bleIcon) - 4)
+
+#define LAPS_MAX 256
+
+static void GUI_RenderScreen();
+static void GUI_StartClick(uint32_t pressTime);
+static void GUI_StopClick(uint32_t pressTime);
+static void GUI_LapClick(uint32_t pressTime);
+static void GUI_StandbyClick(uint32_t pressTime);
+static void GUI_MenuClick(uint32_t pressTime);
+static void GUI_SetReadyModeButtons();
+static void GUI_SetRunModeButtons();
 
 static int isBleConnected = 0;
 static int isBleAdvertisign = 0;
 static char* statusString = "ready";
+static char* buttonText[BUTTON_COUNT];
+static void (*buttonHandlers[BUTTON_COUNT])(uint32_t pressTime);
 
-static void GUI_RenderScreen();
+static uint32_t stopwatchStartTime = 0;
+static int isStopwatchRunning = 0;
+static uint32_t totalTime = 0;
+static uint32_t lapOffsets[LAPS_MAX];
 
 static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t* pMsg) {
     if (pMsg == NULL || pMsg->event != GUI_TIMER_TICK_EVENT) {
         return;
     }
 
-    GUI_RenderScreen();
+    if (isStopwatchRunning) {
+        GUI_RenderScreen();
+    }
 
-    WsfTimerStartMs(&guiTimer, 100);
+    WsfTimerStartMs(&guiTimer, 40);
 }
 
 void GUI_Init() {
+    buttonText[BUTTON_BTNM_NO] = "";
+    buttonHandlers[BUTTON_BTNM_NO] = GUI_MenuClick;
+
+    GUI_SetReadyModeButtons();
+
     guiTimerHandler = WsfOsSetNextHandler(GUI_TimerHandler);
 
     guiTimer.handlerId = guiTimerHandler;
@@ -98,18 +122,9 @@ void GUI_Init() {
 }
 
 void GUI_HandleButtonPress(int buttonNumber, uint32_t pressTime) {
-    if (buttonNumber == 0) {
-        isBleConnected = 1;
-        isBleAdvertisign = 0;
-    } else if (buttonNumber == 1) {
-        isBleConnected = 0;
-        isBleAdvertisign = 1;
-    } else {
-        isBleConnected = 0;
-        isBleAdvertisign = 0;
+    if (buttonHandlers[buttonNumber] != NULL) {
+        buttonHandlers[buttonNumber](pressTime);
     }
-
-    GUI_RenderScreen();
 }
 
 static void GUI_RenderStatusBar() {
@@ -122,27 +137,137 @@ static void GUI_RenderStatusBar() {
             Display_SetPixelBuffer(i + GUI_BLE_POS, 0, bleIcon[i]);
         }
     } else if (isBleAdvertisign) {
-        if ((TIME_TIMER->cnt / 16000000) % 2 == 0) {
+        if ((TIME_TIMER->cnt / TIME_TICK_PER_SEC) % 2 == 0) {
             for (int i = 0; i < sizeof(bleIcon); i++) {
                 Display_SetPixelBuffer(i + GUI_BLE_POS, 0, bleIcon[i]);
             }
         }
     }
 
-    int leftWidth = sizeof(menuIcon) + GUI_MENU_POS;
-    int rightWidth = sizeof(batIcon) + sizeof(bleIcon) + 2;
-
     for (int i = 0; i < sizeof(batIcon); i++) {
         Display_SetPixelBuffer(i + GUI_BAT_POS, 0, batIcon[i]);
     }
 
-    int offset = 10 + (DISPLAY_WIDTH - leftWidth - rightWidth) / 2 - Display_GetStringLength(statusString) / 2;
+    int statusStringLen = Display_GetStringLength(statusString);
+
+    int offset = GUI_STATUS_POS + (GUI_BLE_POS - GUI_STATUS_POS) / 2 - statusStringLen / 2;
 
     Display_PrintString(offset, 0, statusString);
+
+    for (int i = GUI_STATUS_POS; i < GUI_BLE_POS; i++) {
+        Display_ShiftLeftPixelBuffer(i, 0, 1);
+    }
+}
+
+static void GUI_RenderButtons() {
+    int buttonSize = (DISPLAY_WIDTH - 2) / 2;
+
+    int buttonOrderRemap[2] = {BUTTON_BTNL_NO, BUTTON_BTNR_NO};
+
+    for (int i = 0; i < 2; i++) {
+        int textLen = Display_GetStringLength(buttonText[buttonOrderRemap[i]]) - 1;
+
+        int offset = i * (DISPLAY_WIDTH / 2) + buttonSize / 2 - textLen / 2;
+
+        Display_PrintString(offset, DISPLAY_LINES - 1, buttonText[buttonOrderRemap[i]]);
+    }
+    for (int i = 0; i < DISPLAY_WIDTH; i++) {
+        Display_ShiftLeftPixelBuffer(i, DISPLAY_LINES - 1, 1);
+    }
+
+    Display_SetPixelBuffer(buttonSize, DISPLAY_LINES - 1, 0xFF);
+    Display_SetPixelBuffer(buttonSize + 1, DISPLAY_LINES - 1, 0xFF);
+
+    for (int i = 0; i < DISPLAY_WIDTH; i++) {
+        Display_InvertPixelBuffer(i, DISPLAY_LINES - 1);
+    }
+}
+
+static void GUI_PrintTime() {
+    char* str;
+
+    uint32_t timeToRender;
+
+    if (!isStopwatchRunning) {
+        timeToRender = totalTime;
+    } else {
+        uint32_t now = TIME_TIMER->cnt;
+        timeToRender = now - stopwatchStartTime;
+    }
+
+    int sec_total = timeToRender / TIME_TICK_PER_SEC;
+
+    int hours = sec_total / 3600;
+    sec_total %= 3600;
+
+    int minutes = sec_total / 60;
+    sec_total %= 60;
+
+    int sec = sec_total;
+
+    float ticksPerMsec = (float)TIME_TICK_PER_SEC / 1000.0;
+    int msec = (int)((float)(timeToRender % TIME_TICK_PER_SEC) / ticksPerMsec);
+
+    char buff[32];
+    snprintf(buff, sizeof(buff), "%02d:%02d:%02d.%03d", hours, minutes, sec, msec);
+
+    str = buff;
+
+    int len = Display_GetStringLength(str) - 1;
+    int offset = DISPLAY_WIDTH / 2 - len / 2;
+
+    Display_PrintString(offset, 2, str);
+}
+
+static void GUI_StartClick(uint32_t pressTime) {
+    stopwatchStartTime = pressTime;
+    isStopwatchRunning = 1;
+
+    GUI_SetRunModeButtons();
+    GUI_RenderScreen();
+}
+
+static void GUI_StopClick(uint32_t pressTime) {
+    totalTime = pressTime - stopwatchStartTime;
+    isStopwatchRunning = 0;
+
+    GUI_SetReadyModeButtons();
+    GUI_RenderScreen();
+}
+
+static void GUI_LapClick(uint32_t pressTime) {
+}
+
+static void GUI_StandbyClick(uint32_t pressTime) {
+}
+
+static void GUI_MenuClick(uint32_t pressTime) {
+}
+
+static void GUI_SetReadyModeButtons() {
+    statusString = "ready";
+
+    buttonText[BUTTON_BTNL_NO] = "start";
+    buttonHandlers[BUTTON_BTNL_NO] = GUI_StartClick;
+
+    buttonText[BUTTON_BTNR_NO] = "";
+    buttonHandlers[BUTTON_BTNR_NO] = NULL;
+}
+
+static void GUI_SetRunModeButtons() {
+    statusString = "run";
+
+    buttonText[BUTTON_BTNL_NO] = "stop";
+    buttonHandlers[BUTTON_BTNL_NO] = GUI_StopClick;
+
+    buttonText[BUTTON_BTNR_NO] = "lap";
+    buttonHandlers[BUTTON_BTNR_NO] = GUI_LapClick;
 }
 
 static void GUI_RenderScreen() {
     Display_Clear();
     GUI_RenderStatusBar();
+    GUI_PrintTime();
+    GUI_RenderButtons();
     Display_Show();
 }

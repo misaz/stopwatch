@@ -33,7 +33,7 @@ static uint32_t firstTransitionChange[BUTTON_COUNT];
 #define BUTTON_DEBOUNCE_TIME_MS 30
 
 // 30 ms @ 32 MHz
-#define BUTTON_DEBOUNCE_TIME_TICK 960000
+#define BUTTON_DEBOUNCE_TIME_TICK (BUTTON_DEBOUNCE_TIME_MS * TIME_TICK_PER_MSEC)
 
 void Button_GpioInterruptHandler() {
     isEvent = 1;
@@ -66,8 +66,6 @@ void Button_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
         }
 
         int currentBtnState = !!MXC_GPIO_InGet(BUTTON_GPIO, buttonMask[i]);
-
-        uint32_t now = TIME_TIMER->cnt;
 
         /* && (now - firstTransitionChange[i]) < BUTTON_DEBOUNCE_TIME_MS */
         if (prevButtonState[i] == 1 && currentBtnState == 0) {

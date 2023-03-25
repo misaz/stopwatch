@@ -324,13 +324,25 @@ void Display_OrPixelBuffer(int x, int row, uint8_t value) {
     workingBuffer[row * DISPLAY_WIDTH + x] |= value;
 }
 
-void Display_InvertPixelBuffer(int x, int row, uint8_t value) {
+void Display_InvertPixelBuffer(int x, int row) {
     workingBuffer[row * DISPLAY_WIDTH + x] ^= 0xFF;
+}
+
+void Display_ShiftLeftPixelBuffer(int x, int row, int shift) {
+    workingBuffer[row * DISPLAY_WIDTH + x] <<= shift;
+}
+
+void Display_ShiftRightPixelBuffer(int x, int row, int shift) {
+    workingBuffer[row * DISPLAY_WIDTH + x] >>= shift;
 }
 
 int Display_PrintChar(int x, int row, char ch) {
     if (ch == ':') {
         Display_SetPixelBuffer(x, row, 0x0A);
+        Display_SetPixelBuffer(x + 1, row, 0);
+        return x + 2;
+    } else if (ch == '.') {
+        Display_SetPixelBuffer(x, row, 0x10);
         Display_SetPixelBuffer(x + 1, row, 0);
         return x + 2;
     }
@@ -356,6 +368,8 @@ int Display_PrintChar(int x, int row, char ch) {
 
 int Display_GetCharLength(char ch) {
     if (ch == ':') {
+        return 2;
+    } else if (ch == '.') {
         return 2;
     }
 

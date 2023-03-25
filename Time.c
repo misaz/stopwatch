@@ -13,7 +13,7 @@ void Time_Init() {
     cfg.pres = TMR_PRES_1;
     cfg.mode = TMR_MODE_CONTINUOUS;
     cfg.bitMode = TMR_BIT_MODE_32;
-    cfg.clock = MXC_TMR_32M_CLK;
+    cfg.clock = MXC_TMR_32K_CLK;
     cfg.cmp_cnt = 0xFFFFFFFF;
     cfg.pol = 0;
 
