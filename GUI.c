@@ -91,6 +91,8 @@ static uint32_t stopwatchStartTime = 0;
 static int isStopwatchRunning = 0;
 static uint32_t totalTime = 0;
 static uint32_t lapOffsets[LAPS_MAX];
+static int lapCount = 0;
+static char lapNoStatusString[16];
 
 static uint32_t animationCounter = 0;
 
@@ -225,9 +227,56 @@ static void GUI_PrintTime() {
     Display_PrintString(offset, 2, str);
 }
 
+static void GUI_PrintLapTime(uint32_t time, char* timeBuffer, size_t timeBufferSize) {
+    int sec_total = time / TIME_TICK_PER_SEC;
+
+    int hours = sec_total / 3600;
+    sec_total %= 3600;
+
+    int minutes = sec_total / 60;
+    sec_total %= 60;
+
+    int sec = sec_total;
+
+    float ticksPerMsec = (float)TIME_TICK_PER_SEC / 1000.0;
+    int msec = (int)((float)(time % TIME_TICK_PER_SEC) / ticksPerMsec);
+
+    if (hours == 0 && minutes == 0) {
+        snprintf(timeBuffer, timeBufferSize, "%02d.%03d", sec, msec);
+    } else if (hours == 0) {
+        snprintf(timeBuffer, timeBufferSize, "%02d:%02d.%03d", minutes, sec, msec);
+    } else {
+        snprintf(timeBuffer, timeBufferSize, "%02d:%02d:%02d", hours, minutes, sec);
+    }
+}
+
+static void GUI_PrintLaps() {
+    char time[32];
+    char line[32];
+
+    uint32_t lapTime;
+
+    if (lapCount == 1) {
+        lapTime = lapOffsets[0] - stopwatchStartTime;
+    } else {
+        lapTime = lapOffsets[lapCount - 1] - lapOffsets[lapCount - 2];
+    }
+
+    GUI_PrintLapTime(lapTime, time, sizeof(time));
+    snprintf(line, sizeof(line), "L%d: %s", lapCount, time);
+
+    Display_PrintString(0, 3, line);
+
+    GUI_PrintLapTime(TIME_TIMER->cnt - lapOffsets[lapCount - 1], time, sizeof(time));
+    snprintf(line, sizeof(line), "L%d: %s", lapCount + 1, time);
+
+    Display_PrintString(0, 4, line);
+}
+
 static void GUI_StartClick(uint32_t pressTime) {
     stopwatchStartTime = pressTime;
     isStopwatchRunning = 1;
+    lapCount = 0;
 
     GUI_SetRunModeButtons();
     GUI_RenderScreen();
@@ -242,6 +291,12 @@ static void GUI_StopClick(uint32_t pressTime) {
 }
 
 static void GUI_LapClick(uint32_t pressTime) {
+    if (lapCount < LAPS_MAX) {
+        lapOffsets[lapCount++] = pressTime;
+    }
+
+    GUI_SetRunModeButtons();
+    GUI_RenderScreen();
 }
 
 static void GUI_StandbyClick(uint32_t pressTime) {
@@ -261,13 +316,26 @@ static void GUI_SetReadyModeButtons() {
 }
 
 static void GUI_SetRunModeButtons() {
-    statusString = "run";
+    if (lapCount == 0 || lapCount >= LAPS_MAX) {
+        statusString = "run";
+    } else if (lapCount < 99) {
+        snprintf(lapNoStatusString, sizeof(lapNoStatusString), "lap %d", lapCount + 1);
+        statusString = lapNoStatusString;
+    } else {
+        snprintf(lapNoStatusString, sizeof(lapNoStatusString), "lp %d", lapCount + 1);
+        statusString = lapNoStatusString;
+    }
 
     buttonText[BUTTON_BTNL_NO] = "stop";
     buttonHandlers[BUTTON_BTNL_NO] = GUI_StopClick;
 
-    buttonText[BUTTON_BTNR_NO] = "lap";
-    buttonHandlers[BUTTON_BTNR_NO] = GUI_LapClick;
+    if (lapCount < LAPS_MAX) {
+        buttonText[BUTTON_BTNR_NO] = "lap";
+        buttonHandlers[BUTTON_BTNR_NO] = GUI_LapClick;
+    } else {
+        buttonText[BUTTON_BTNR_NO] = "";
+        buttonHandlers[BUTTON_BTNR_NO] = NULL;
+    }
 }
 
 void GUI_SetBleAdvertisignStatus(int isAdvertisign) {
@@ -284,6 +352,9 @@ static void GUI_RenderScreen() {
     Display_Clear();
     GUI_RenderStatusBar();
     GUI_PrintTime();
+    if (lapCount > 0) {
+        GUI_PrintLaps();
+    }
     GUI_RenderButtons();
     Display_Show();
 }
