@@ -92,16 +92,22 @@ static int isStopwatchRunning = 0;
 static uint32_t totalTime = 0;
 static uint32_t lapOffsets[LAPS_MAX];
 
+static uint32_t animationCounter = 0;
+
 static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t* pMsg) {
     if (pMsg == NULL || pMsg->event != GUI_TIMER_TICK_EVENT) {
         return;
     }
 
-    if (isStopwatchRunning) {
+    animationCounter++;
+
+    int isAnimationRenderNeeded = !isBleConnected && isBleAdvertisign && (animationCounter % 5 == 0);
+
+    if (isStopwatchRunning || isAnimationRenderNeeded) {
         GUI_RenderScreen();
     }
 
-    WsfTimerStartMs(&guiTimer, 40);
+    WsfTimerStartMs(&guiTimer, 50);
 }
 
 void GUI_Init() {
@@ -137,7 +143,7 @@ static void GUI_RenderStatusBar() {
             Display_SetPixelBuffer(i + GUI_BLE_POS, 0, bleIcon[i]);
         }
     } else if (isBleAdvertisign) {
-        if ((TIME_TIMER->cnt / TIME_TICK_PER_SEC) % 2 == 0) {
+        if (animationCounter % 10 < 5) {
             for (int i = 0; i < sizeof(bleIcon); i++) {
                 Display_SetPixelBuffer(i + GUI_BLE_POS, 0, bleIcon[i]);
             }
@@ -262,6 +268,16 @@ static void GUI_SetRunModeButtons() {
 
     buttonText[BUTTON_BTNR_NO] = "lap";
     buttonHandlers[BUTTON_BTNR_NO] = GUI_LapClick;
+}
+
+void GUI_SetBleAdvertisignStatus(int isAdvertisign) {
+    isBleAdvertisign = isAdvertisign;
+    GUI_RenderScreen();
+}
+
+void GUI_SetBleConnectionStatus(int isConnected) {
+    isBleConnected = isConnected;
+    GUI_RenderScreen();
 }
 
 static void GUI_RenderScreen() {

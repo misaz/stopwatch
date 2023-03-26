@@ -1,5 +1,8 @@
-/* project */
+/* self */
 #include "BLE.h"
+
+/* project */
+#include "GUI.h"
 
 /* stdlib */
 #include <stdbool.h>
@@ -710,8 +713,21 @@ static void fitProcMsg(wsfMsgHdr_t *pMsg) {
             fitSetup();
             break;
 
+        case DM_ADV_START_IND:
+            GUI_SetBleAdvertisignStatus(1);
+            break;
+
+        case DM_ADV_STOP_IND:
+            GUI_SetBleAdvertisignStatus(0);
+            break;
+
+        case DM_CONN_OPEN_IND:
+            GUI_SetBleConnectionStatus(1);
+            break;
+
         case DM_CONN_CLOSE_IND:
             fitClose(pMsg);
+            GUI_SetBleConnectionStatus(0);
             break;
 
         case DM_SEC_PAIR_CMPL_IND:

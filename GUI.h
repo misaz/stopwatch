@@ -5,5 +5,7 @@
 
 void GUI_Init();
 void GUI_HandleButtonPress(int buttonNumber, uint32_t pressTime);
+void GUI_SetBleAdvertisignStatus(int isAdvertisign);
+void GUI_SetBleConnectionStatus(int isConnected);
 
 #endif
