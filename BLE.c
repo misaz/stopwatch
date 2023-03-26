@@ -691,7 +691,7 @@ static void fitCccCback(attsCccEvt_t *pEvt) {
     }
 }
 
-static void fitSetup() {
+static void BLE_SetupAdvertising() {
     AppAdvSetData(APP_ADV_DATA_DISCOVERABLE, sizeof(fitAdvDataDisc), (uint8_t *)fitAdvDataDisc);
     AppAdvSetData(APP_SCAN_DATA_DISCOVERABLE, sizeof(fitScanDataDisc), (uint8_t *)fitScanDataDisc);
 
@@ -710,7 +710,7 @@ static void fitProcMsg(wsfMsgHdr_t *pMsg) {
         case DM_RESET_CMPL_IND:
             AttsCalculateDbHash();
             DmSecGenerateEccKeyReq();
-            fitSetup();
+            BLE_SetupAdvertising();
             break;
 
         case DM_ADV_START_IND:

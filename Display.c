@@ -124,11 +124,6 @@ static void Display_SwapBuffers(uint8_t **b1, uint8_t **b2) {
     uint8_t *temp = *b1;
     *b1 = *b2;
     *b2 = temp;
-
-    APP_TRACE_INFO0("Buffers swapped. New state:");
-    APP_TRACE_INFO1("working buffer = %p", workingBuffer);
-    APP_TRACE_INFO1("readyBuffer buffer = %p", readyBuffer);
-    APP_TRACE_INFO1("transmitBuffer buffer = %p", transmitBuffer);
 }
 
 static void Display_CompletionCallback(mxc_i2c_req_t *req, int result) {
@@ -138,7 +133,6 @@ static void Display_CompletionCallback(mxc_i2c_req_t *req, int result) {
 
 static void Display_TransmitNextConfigCommand() {
     int status;
-    APP_TRACE_INFO0("Display_TransmitNextConfigCommand");
 
     commandBuffer[0] = 0x00;
     commandBuffer[1] = *configCommandsToExecute;
@@ -156,7 +150,6 @@ static void Display_TransmitNextConfigCommand() {
 
 static void Display_TransmitNextSendBufferCommand() {
     int status;
-    APP_TRACE_INFO0("Display_TransmitNextSendBufferCommand");
 
     commandBuffer[0] = 0x00;
     commandBuffer[1] = *sendBufferCommandToExecute;
@@ -174,7 +167,6 @@ static void Display_TransmitNextSendBufferCommand() {
 
 static void Display_TransmitScreenData() {
     int status;
-    APP_TRACE_INFO0("Display_TransmitScreenData");
 
     i2cRequest.tx_buf = transmitBuffer - 1;
     i2cRequest.tx_len = sizeof(buffer1);
@@ -253,22 +245,16 @@ static void Display_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
 }
 
 void Display_Init() {
-    APP_TRACE_INFO0("Display_Init");
-
     displayOpTimerHandler = WsfOsSetNextHandler(Display_TimerHandler);
     displayOpTimer.handlerId = displayOpTimerHandler;
     displayOpTimer.msg.event = DISPLAY_TIMER_TICK_EVENT;
     displayOpTimer.msg.param = 0;
     displayOpTimer.msg.status = 0;
     WsfTimerStartMs(&displayOpTimer, 250);
-
-    APP_TRACE_INFO0("Display_Init: Initialization successfull");
 }
 
 static void Display_InitI2C() {
     int status;
-
-    APP_TRACE_INFO0("Display_InitI2C");
 
     i2cRequest.addr = DISPLAY_I2C_ADDRESS;
     i2cRequest.i2c = DISPLAY_I2C;
@@ -301,8 +287,6 @@ static void Display_InitI2C() {
     NVIC_SetPriority(DISPLAY_I2C_IRQn, 3);
     NVIC_ClearPendingIRQ(DISPLAY_I2C_IRQn);
     NVIC_EnableIRQ(DISPLAY_I2C_IRQn);
-
-    APP_TRACE_INFO0("Display_InitI2C: Success");
 }
 
 void Display_Show() {
