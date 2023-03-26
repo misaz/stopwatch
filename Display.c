@@ -301,6 +301,9 @@ void Display_Clear() {
 }
 
 void Display_SetPixelBuffer(int x, int row, uint8_t value) {
+    if (x >= DISPLAY_WIDTH || row >= DISPLAY_LINES) {
+        return;
+    }
     workingBuffer[row * DISPLAY_WIDTH + x] = value;
 }
 
@@ -329,6 +332,10 @@ int Display_PrintChar(int x, int row, char ch) {
         Display_SetPixelBuffer(x, row, 0x10);
         Display_SetPixelBuffer(x + 1, row, 0);
         return x + 2;
+    } else if (ch == ' ') {
+        Display_SetPixelBuffer(x, row, 0);
+        Display_SetPixelBuffer(x + 1, row, 0);
+        return x + 2;
     }
 
     if (ch >= 'a' && ch <= 'z') {
@@ -354,6 +361,8 @@ int Display_GetCharLength(char ch) {
     if (ch == ':') {
         return 2;
     } else if (ch == '.') {
+        return 2;
+    } else if (ch == ' ') {
         return 2;
     }
 
