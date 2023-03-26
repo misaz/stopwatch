@@ -88,6 +88,7 @@ static char* buttonText[BUTTON_COUNT];
 static void (*buttonHandlers[BUTTON_COUNT])(uint32_t pressTime);
 
 static uint32_t stopwatchStartTime = 0;
+static uint32_t stopwatchStopTime = 0;
 static int isStopwatchRunning = 0;
 static uint32_t totalTime = 0;
 static uint32_t lapOffsets[LAPS_MAX];
@@ -267,7 +268,13 @@ static void GUI_PrintLaps() {
 
     Display_PrintString(0, 3, line);
 
-    GUI_PrintLapTime(TIME_TIMER->cnt - lapOffsets[lapCount - 1], time, sizeof(time));
+    if (isStopwatchRunning) {
+        lapTime = TIME_TIMER->cnt - lapOffsets[lapCount - 1];
+    } else {
+        lapTime = stopwatchStopTime - lapOffsets[lapCount - 1];
+    }
+
+    GUI_PrintLapTime(lapTime, time, sizeof(time));
     snprintf(line, sizeof(line), "L%d: %s", lapCount + 1, time);
 
     Display_PrintString(0, 4, line);
@@ -284,6 +291,7 @@ static void GUI_StartClick(uint32_t pressTime) {
 
 static void GUI_StopClick(uint32_t pressTime) {
     totalTime = pressTime - stopwatchStartTime;
+    stopwatchStopTime = pressTime;
     isStopwatchRunning = 0;
 
     GUI_SetReadyModeButtons();
