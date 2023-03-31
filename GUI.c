@@ -72,7 +72,7 @@ static const uint8_t closeIcon[] = {
 #define GUI_BAT_POS (DISPLAY_WIDTH - sizeof(batIcon))
 #define GUI_BLE_POS (DISPLAY_WIDTH - sizeof(batIcon) - sizeof(bleIcon) - 4)
 
-#define GUI_LED_BRIGHTNESS 10
+#define GUI_LED_BRIGHTNESS 5
 
 #define LAPS_MAX 256
 
