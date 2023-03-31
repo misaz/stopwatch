@@ -6,6 +6,7 @@
 #include "Button.h"
 #include "Display.h"
 #include "Time.h"
+#include "Ws2812b.h"
 
 /* sdtlib */
 #include <stdio.h>
@@ -71,6 +72,8 @@ static const uint8_t closeIcon[] = {
 #define GUI_BAT_POS (DISPLAY_WIDTH - sizeof(batIcon))
 #define GUI_BLE_POS (DISPLAY_WIDTH - sizeof(batIcon) - sizeof(bleIcon) - 4)
 
+#define GUI_LED_BRIGHTNESS 10
+
 #define LAPS_MAX 256
 
 static void GUI_RenderScreen();
@@ -97,6 +100,7 @@ static int lapCount = 0;
 static char lapNoStatusString[16];
 
 static uint32_t animationCounter = 0;
+static int ledAnimation = 0;
 
 static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
     if (pMsg == NULL || pMsg->event != GUI_TIMER_TICK_EVENT) {
@@ -114,6 +118,20 @@ static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
     if (isStopwatchRunning) {
         BLE_SetCurrentTime(TIME_TIMER->cnt - stopwatchStartTime);
     }
+
+    if (isStopwatchRunning) {
+        WS2812B_SetColor(0, 0, GUI_LED_BRIGHTNESS, 0);
+    } else if (isBleAdvertisign && !isBleConnected) {
+        if (animationCounter % 10 < 5) {
+            WS2812B_SetColor(0, 0, 0, GUI_LED_BRIGHTNESS);
+        } else {
+            WS2812B_SetColor(0, GUI_LED_BRIGHTNESS, GUI_LED_BRIGHTNESS, 0);
+        }
+    } else {
+        WS2812B_SetColor(0, 0, 0, 0);
+    }
+
+    WS2812B_Transmit();
 
     WsfTimerStartMs(&guiTimer, 50);
 }
