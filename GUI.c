@@ -2,6 +2,7 @@
 #include "GUI.h"
 
 /* project */
+#include "BLE.h"
 #include "Button.h"
 #include "Display.h"
 #include "Time.h"
@@ -83,8 +84,8 @@ static void GUI_SetRunModeButtons();
 
 static int isBleConnected = 0;
 static int isBleAdvertisign = 0;
-static char* statusString = "ready";
-static char* buttonText[BUTTON_COUNT];
+static char *statusString = "ready";
+static char *buttonText[BUTTON_COUNT];
 static void (*buttonHandlers[BUTTON_COUNT])(uint32_t pressTime);
 
 static uint32_t stopwatchStartTime = 0;
@@ -97,7 +98,7 @@ static char lapNoStatusString[16];
 
 static uint32_t animationCounter = 0;
 
-static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t* pMsg) {
+static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
     if (pMsg == NULL || pMsg->event != GUI_TIMER_TICK_EVENT) {
         return;
     }
@@ -108,6 +109,10 @@ static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t* pMsg) {
 
     if (isStopwatchRunning || isAnimationRenderNeeded) {
         GUI_RenderScreen();
+    }
+
+    if (isStopwatchRunning) {
+        BLE_SetCurrentTime(TIME_TIMER->cnt - stopwatchStartTime);
     }
 
     WsfTimerStartMs(&guiTimer, 50);
@@ -193,7 +198,7 @@ static void GUI_RenderButtons() {
 }
 
 static void GUI_PrintTime() {
-    char* str;
+    char *str;
 
     uint32_t timeToRender;
 
@@ -228,7 +233,7 @@ static void GUI_PrintTime() {
     Display_PrintString(offset, 2, str);
 }
 
-static void GUI_PrintLapTime(uint32_t time, char* timeBuffer, size_t timeBufferSize) {
+static void GUI_PrintLapTime(uint32_t time, char *timeBuffer, size_t timeBufferSize) {
     int sec_total = time / TIME_TICK_PER_SEC;
 
     int hours = sec_total / 3600;
@@ -285,6 +290,9 @@ static void GUI_StartClick(uint32_t pressTime) {
     isStopwatchRunning = 1;
     lapCount = 0;
 
+    BLE_LapCountChanged(lapCount);
+    BLE_SetStatus(0x01);
+
     GUI_SetRunModeButtons();
     GUI_RenderScreen();
 }
@@ -294,6 +302,9 @@ static void GUI_StopClick(uint32_t pressTime) {
     stopwatchStopTime = pressTime;
     isStopwatchRunning = 0;
 
+    BLE_SetCurrentTime(totalTime);
+    BLE_SetStatus(0x00);
+
     GUI_SetReadyModeButtons();
     GUI_RenderScreen();
 }
@@ -302,6 +313,8 @@ static void GUI_LapClick(uint32_t pressTime) {
     if (lapCount < LAPS_MAX) {
         lapOffsets[lapCount++] = pressTime;
     }
+
+    BLE_LapCountChanged(lapCount);
 
     GUI_SetRunModeButtons();
     GUI_RenderScreen();
@@ -365,4 +378,16 @@ static void GUI_RenderScreen() {
     }
     GUI_RenderButtons();
     Display_Show();
+}
+
+uint32_t GUI_GetLapTime(uint8_t lapNumber) {
+    if (lapNumber >= lapCount) {
+        return 0;
+    }
+
+    if (lapNumber == 0) {
+        return lapOffsets[0] - stopwatchStartTime;
+    } else {
+        return lapOffsets[lapNumber] - lapOffsets[lapNumber - 1];
+    }
 }

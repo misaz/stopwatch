@@ -1,28 +1,36 @@
 {
-    "configurations": [
-        {
-            "name": "Win32",
-            "includePath": [
-                "${default}",
-                "C:/MaximSDK/Libraries/CMSIS/Device/Maxim/MAX32655/Include",
-                "C:/MaximSDK/Libraries/PeriphDrivers/Include/MAX32655",
-                "C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/profiles",
-                "C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/af",
-                "C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/services",
-                "C:/MaximSDK/Libraries/Cordio/ble-host/sources/stack/dm",
-                "C:/MaximSDK/Libraries/Cordio/ble-host/sources/stack/hci"
-            ],
-            "defines": [
-                "${default}"
-            ],
-            "intelliSenseMode": "gcc-arm",
-            "compilerPath": "C:/MaximSDK/Tools/GNUTools/10.3/bin/arm-none-eabi-gcc.exe",
-            "browse": {
-                "path": [
-                    "${default}"
-                ]
-            }
-        }
-    ],
-    "version": 4
+	"configurations": [
+		{
+			"name": "Win32",
+			"includePath": [
+				"${default}",
+				"C:/MaximSDK/Libraries/CMSIS/Device/Maxim/MAX32655/Include",
+				"C:/MaximSDK/Libraries/PeriphDrivers/Include/MAX32655",
+				"C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/profiles",
+				"C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/af",
+				"C:/MaximSDK/Libraries/Cordio/ble-profiles/sources/services",
+				"C:/MaximSDK/Libraries/Cordio/ble-host/sources/stack/dm",
+				"C:/MaximSDK/Libraries/Cordio/ble-host/sources/stack/hci",
+				"C:/MaximSDK/Libraries/Cordio/ble-profiles/include",
+				"C:/MaximSDK/Libraries/Cordio/wsf/include",
+				"C:/MaximSDK/Libraries/Cordio/ble-host/include",
+				"C:/MaximSDK/Libraries/Cordio/controller/include/common",
+				"C:/MaximSDK/Libraries/Cordio/ble-host/sources/stack/cfg",
+				"C:/MaximSDK/Libraries/Cordio/platform/include",
+				"C:/MaximSDK/Libraries/CMSIS/Include",
+				"C:/MaximSDK/Libraries/Cordio/controller/include/ble"
+			],
+			"defines": [
+				"${default}"
+			],
+			"intelliSenseMode": "gcc-arm",
+			"compilerPath": "C:/MaximSDK/Tools/GNUTools/10.3/bin/arm-none-eabi-gcc.exe",
+			"browse": {
+				"path": [
+					"${default}"
+				]
+			}
+		}
+	],
+	"version": 4
 }

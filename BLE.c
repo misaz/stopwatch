@@ -41,19 +41,17 @@
 #include <wsf_types.h>
 #include <wut.h>
 
-void wutTrimCb(int err);
-static void fitDmCback(dmEvt_t *pDmEvt);
-static void fitAttCback(attEvt_t *pEvt);
-static void fitCccCback(attsCccEvt_t *pEvt);
+void BLE_WakeupTimerTrimCallback(int err);
+static void BLE_DeviceManagementCallback(dmEvt_t *pDmEvt);
+static void BLE_AttCallback(attEvt_t *pEvt);
+static void BLE_CccCallback(attsCccEvt_t *pEvt);
 static void BLE_Handler(wsfEventMask_t event, wsfMsgHdr_t *pMsg);
 static void BLE_Start();
-static void fitClose(wsfMsgHdr_t *msg);
-static void fitProcMsg(wsfMsgHdr_t *pMsg);
-static void fitProcCccState(wsfMsgHdr_t *msg);
+static void BLE_ProcessMessage(wsfMsgHdr_t *pMsg);
 static void BLE_HandlerInit(wsfHandlerId_t handlerId);
 static uint8_t BLE_StopwatchWriteCallback(dmConnId_t connId, uint16_t handle, uint8_t operation, uint16_t offset, uint16_t len, uint8_t *pValue, attsAttr_t *pAttr);
 
-static wsfBufPoolDesc_t poolDescriptions[] = {
+static wsfBufPoolDesc_t memoryPoolDescriptors[] = {
     {.len = 16, .num = 8},
     {.len = 32, .num = 4},
     {.len = 192, .num = 8},
@@ -61,7 +59,7 @@ static wsfBufPoolDesc_t poolDescriptions[] = {
     {.len = 512, .num = 4},
 };
 
-static const smpCfg_t fitSmpCfg = {
+static const smpCfg_t secureManagerConfig = {
     .attemptTimeout = 500,
     .ioCap = SMP_IO_NO_IN_NO_OUT,
     .minKeyLen = 7,
@@ -73,16 +71,16 @@ static const smpCfg_t fitSmpCfg = {
     .attemptExp = 2,
 };
 
-static const appAdvCfg_t fitAdvCfg = {
+static const appAdvCfg_t advertisignConfig = {
     .advDuration = {60000, 0, 0},
     .advInterval = {800, 0, 0},
 };
 
-static const appSlaveCfg_t fitSlaveCfg = {
+static const appSlaveCfg_t slaveConfig = {
     .connMax = 1,
 };
 
-static const appSecCfg_t fitSecCfg = {
+static const appSecCfg_t securityConfig = {
     .auth = DM_AUTH_BOND_FLAG | DM_AUTH_SC_FLAG,
     .iKeyDist = 0,
     .rKeyDist = DM_KEY_DIST_LTK,
@@ -90,7 +88,7 @@ static const appSecCfg_t fitSecCfg = {
     .initiateSec = TRUE,
 };
 
-static const appUpdateCfg_t fitUpdateCfg = {
+static const appUpdateCfg_t updateConfig = {
     .idlePeriod = 6000,
     .connIntervalMin = 640,
     .connIntervalMax = 800,
@@ -99,7 +97,7 @@ static const appUpdateCfg_t fitUpdateCfg = {
     .maxAttempts = 5,
 };
 
-static const uint8_t fitAdvDataDisc[] = {
+static const uint8_t avertisignData[] = {
     /*! flags */
     2,                                                  /*! length */
     DM_ADV_TYPE_FLAGS,                                  /*! AD type */
@@ -111,7 +109,7 @@ static const uint8_t fitAdvDataDisc[] = {
     0,                    /*! tx power */
 };
 
-static const uint8_t fitScanDataDisc[] = {
+static const uint8_t scanData[] = {
     /*! device name */
     11,                     /*! length */
     DM_ADV_TYPE_LOCAL_NAME, /*! AD type */
@@ -442,15 +440,15 @@ static void BLE_InitWsf(void) {
     const uint16_t aclBufSize = 12 + mainLlRtCfg.maxAclLen + 4 + BB_DATA_PDU_TAILROOM;
 
     /* Adjust buffer allocation based on platform configuration. */
-    poolDescriptions[2].len = maxRptBufSize;
-    poolDescriptions[2].num = mainLlRtCfg.maxAdvReports;
-    poolDescriptions[3].len = aclBufSize;
-    poolDescriptions[3].num = mainLlRtCfg.numTxBufs + mainLlRtCfg.numRxBufs;
+    memoryPoolDescriptors[2].len = maxRptBufSize;
+    memoryPoolDescriptors[2].num = mainLlRtCfg.maxAdvReports;
+    memoryPoolDescriptors[3].len = aclBufSize;
+    memoryPoolDescriptors[3].num = mainLlRtCfg.numTxBufs + mainLlRtCfg.numRxBufs;
 
-    const uint8_t numPools = sizeof(poolDescriptions) / sizeof(poolDescriptions[0]);
+    const uint8_t numPools = sizeof(memoryPoolDescriptors) / sizeof(memoryPoolDescriptors[0]);
 
     uint16_t memUsed;
-    memUsed = WsfBufInit(numPools, poolDescriptions);
+    memUsed = WsfBufInit(numPools, memoryPoolDescriptors);
     WsfHeapAlloc(memUsed);
     WsfOsInit();
     WsfTimerInit();
@@ -564,7 +562,7 @@ void BLE_Init() {
 
     /* Execute the trim procedure */
     wutTrimComplete = 0;
-    MXC_WUT_TrimCrystalAsync(wutTrimCb);
+    MXC_WUT_TrimCrystalAsync(BLE_WakeupTimerTrimCallback);
     while (!wutTrimComplete) {
     }
 
@@ -582,17 +580,17 @@ static void BLE_HandlerInit(wsfHandlerId_t handlerId) {
     bleHandlerId = handlerId;
 
     /* Set configuration pointers */
-    pAppAdvCfg = (appAdvCfg_t *)&fitAdvCfg;
-    pAppSlaveCfg = (appSlaveCfg_t *)&fitSlaveCfg;
-    pAppSecCfg = (appSecCfg_t *)&fitSecCfg;
-    pAppUpdateCfg = (appUpdateCfg_t *)&fitUpdateCfg;
+    pAppAdvCfg = (appAdvCfg_t *)&advertisignConfig;
+    pAppSlaveCfg = (appSlaveCfg_t *)&slaveConfig;
+    pAppSecCfg = (appSecCfg_t *)&securityConfig;
+    pAppUpdateCfg = (appUpdateCfg_t *)&updateConfig;
 
     /* Initialize application framework */
     AppSlaveInit();
     AppServerInit();
 
     /* Set stack configuration pointers */
-    pSmpCfg = (smpCfg_t *)&fitSmpCfg;
+    pSmpCfg = (smpCfg_t *)&secureManagerConfig;
 }
 
 static void BLE_Handler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
@@ -613,17 +611,17 @@ static void BLE_Handler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
         }
 
         /* perform profile and user interface-related operations */
-        fitProcMsg(pMsg);
+        BLE_ProcessMessage(pMsg);
     }
 }
 
 static void BLE_Start() {
     /* Register for stack callbacks */
-    DmRegister(fitDmCback);
-    DmConnRegister(DM_CLIENT_ID_APP, fitDmCback);
-    AttRegister(fitAttCback);
+    DmRegister(BLE_DeviceManagementCallback);
+    DmConnRegister(DM_CLIENT_ID_APP, BLE_DeviceManagementCallback);
+    AttRegister(BLE_AttCallback);
     AttConnRegister(AppServerConnCback);
-    AttsCccRegister(NUM_CCC_IDX, (attsCccSet_t *)fitCccSet, fitCccCback);
+    AttsCccRegister(NUM_CCC_IDX, (attsCccSet_t *)fitCccSet, BLE_CccCallback);
 
     /* Initialize attribute server database */
     SvcCoreGattCbackRegister(GattReadCback, GattWriteCback);
@@ -642,17 +640,17 @@ void WUT_IRQHandler(void) {
     MXC_WUT_Handler();
 }
 
-void wutTrimCb(int err) {
+void BLE_WakeupTimerTrimCallback(int err) {
     if (err != E_NO_ERROR) {
-        APP_TRACE_INFO1("32 kHz trim error %d\n", err);
-    } else {
-        APP_TRACE_INFO1("32kHz trimmed to 0x%x", (MXC_TRIMSIR->rtc & MXC_F_TRIMSIR_RTC_X1TRIM) >>
-                                                     MXC_F_TRIMSIR_RTC_X1TRIM_POS);
+        APP_TRACE_INFO1("WUT Timer trimming failed with status code %d\n", err);
+        return;
     }
+
+    APP_TRACE_INFO1("Wakeup timer was sucessfully trimmed. Trim value 0x%x", (MXC_TRIMSIR->rtc & MXC_F_TRIMSIR_RTC_X1TRIM) >> MXC_F_TRIMSIR_RTC_X1TRIM_POS);
     wutTrimComplete = 1;
 }
 
-static void fitDmCback(dmEvt_t *pDmEvt) {
+static void BLE_DeviceManagementCallback(dmEvt_t *pDmEvt) {
     dmEvt_t *pMsg;
     uint16_t len = DmSizeOfEvt(pDmEvt);
 
@@ -662,7 +660,7 @@ static void fitDmCback(dmEvt_t *pDmEvt) {
     }
 }
 
-static void fitAttCback(attEvt_t *pEvt) {
+static void BLE_AttCallback(attEvt_t *pEvt) {
     attEvt_t *pMsg;
 
     if ((pMsg = WsfMsgAlloc(sizeof(attEvt_t) + pEvt->valueLen)) != NULL) {
@@ -673,7 +671,7 @@ static void fitAttCback(attEvt_t *pEvt) {
     }
 }
 
-static void fitCccCback(attsCccEvt_t *pEvt) {
+static void BLE_CccCallback(attsCccEvt_t *pEvt) {
     attsCccEvt_t *pMsg;
     appDbHdl_t dbHdl;
 
@@ -692,8 +690,8 @@ static void fitCccCback(attsCccEvt_t *pEvt) {
 }
 
 static void BLE_SetupAdvertising() {
-    AppAdvSetData(APP_ADV_DATA_DISCOVERABLE, sizeof(fitAdvDataDisc), (uint8_t *)fitAdvDataDisc);
-    AppAdvSetData(APP_SCAN_DATA_DISCOVERABLE, sizeof(fitScanDataDisc), (uint8_t *)fitScanDataDisc);
+    AppAdvSetData(APP_ADV_DATA_DISCOVERABLE, sizeof(avertisignData), (uint8_t *)avertisignData);
+    AppAdvSetData(APP_SCAN_DATA_DISCOVERABLE, sizeof(scanData), (uint8_t *)scanData);
 
     AppAdvSetData(APP_ADV_DATA_CONNECTABLE, 0, NULL);
     AppAdvSetData(APP_SCAN_DATA_CONNECTABLE, 0, NULL);
@@ -701,11 +699,13 @@ static void BLE_SetupAdvertising() {
     AppAdvStart(APP_MODE_AUTO_INIT);
 }
 
-static void fitProcMsg(wsfMsgHdr_t *pMsg) {
+static void BLE_ProcessMessage(wsfMsgHdr_t *pMsg) {
     switch (pMsg->event) {
-        case ATTS_CCC_STATE_IND:
-            fitProcCccState(pMsg);
+        case ATTS_CCC_STATE_IND: {
+            attsCccEvt_t *cccEvent = (attsCccEvt_t *)pMsg;
+            APP_TRACE_INFO3("CCC (id=%d, handle=%d) changed state to 0x%02x", cccEvent->idx, cccEvent->handle, cccEvent->value);
             break;
+        }
 
         case DM_RESET_CMPL_IND:
             AttsCalculateDbHash();
@@ -726,7 +726,6 @@ static void fitProcMsg(wsfMsgHdr_t *pMsg) {
             break;
 
         case DM_CONN_CLOSE_IND:
-            fitClose(pMsg);
             GUI_SetBleConnectionStatus(0);
             break;
 
@@ -762,17 +761,76 @@ static void fitProcMsg(wsfMsgHdr_t *pMsg) {
     }
 }
 
-static void fitClose(wsfMsgHdr_t *msg) {
-}
-
-static void fitProcCccState(wsfMsgHdr_t *msg) {
-    attsCccEvt_t *ccce = (attsCccEvt_t *)msg;
-    APP_TRACE_INFO3("ccc state ind value:%d handle:%d idx:%d", ccce->value, ccce->handle, ccce->idx);
-}
-
 static uint8_t BLE_StopwatchWriteCallback(dmConnId_t connId, uint16_t handle, uint8_t operation, uint16_t offset, uint16_t len, uint8_t *pValue, attsAttr_t *pAttr) {
-    APP_TRACE_INFO0("BLE_StopwatchWriteCallback");
+    uint8_t status;
 
-    AttsSetAttr(handle, 1, pValue);
-    return ATT_SUCCESS;
+    if (handle == STOPWATCH_LAP_SELECT_VALUE_HANDLE) {
+        if (len < 1) {
+            return ATT_ERR_LENGTH;
+        }
+
+        uint32_t time = GUI_GetLapTime(*pValue);
+
+        status = AttsSetAttr(STOPWATCH_LAP_TIME_VALUE_HANDLE, sizeof(time), (uint8_t *)&time);
+        if (status) {
+            APP_TRACE_ERR1("Setting lap time attribute failed with status code 0x%02x", status);
+            return ATT_ERR_UNLIKELY;
+        }
+
+        status = AttsSetAttr(STOPWATCH_LAP_SELECT_VALUE_HANDLE, sizeof(uint8_t), pValue);
+        if (status) {
+            APP_TRACE_ERR1("Setting lap select attribute failed with status code 0x%02x", status);
+            return ATT_ERR_UNLIKELY;
+        }
+
+        return ATT_SUCCESS;
+    }
+
+    return ATT_ERR_NOT_FOUND;
+}
+
+void BLE_LapCountChanged(uint8_t newLapsCount) {
+    uint8_t status;
+
+    status = AttsSetAttr(STOPWATCH_STATUS_VALUE_HANDLE, sizeof(newLapsCount), (uint8_t *)&newLapsCount);
+    if (status) {
+        APP_TRACE_ERR1("Error while laps count value. Status 0x%02x", status);
+        return;
+    }
+
+    dmConnId_t connId = AppConnIsOpen();
+    if (stopwatchLapsCount != newLapsCount && connId != DM_CONN_ID_NONE && AttsCccEnabled(connId, STOPWATCH_LAPS_COUNT_IDX)) {
+        AttsHandleValueNtf(connId, STOPWATCH_LAPS_COUNT_VALUE_HANDLE, sizeof(newLapsCount), (uint8_t *)&newLapsCount);
+    }
+
+    stopwatchLapsCount = newLapsCount;
+}
+
+void BLE_SetCurrentTime(uint32_t time) {
+    uint8_t status;
+
+    status = AttsSetAttr(STOPWATCH_ELAPSED_VALUE_HANDLE, sizeof(time), (uint8_t *)&time);
+    if (status) {
+        APP_TRACE_ERR1("Error while setting current elapsed time. Status 0x%02x", status);
+        return;
+    }
+
+    stopwatchElapsed = time;
+}
+
+void BLE_SetStatus(uint8_t newStatus) {
+    uint8_t status;
+
+    status = AttsSetAttr(STOPWATCH_STATUS_VALUE_HANDLE, sizeof(newStatus), &newStatus);
+    if (status) {
+        APP_TRACE_ERR1("Error while setting status value. Status 0x%02x", status);
+        return;
+    }
+
+    dmConnId_t connId = AppConnIsOpen();
+    if (connId != DM_CONN_ID_NONE && AttsCccEnabled(connId, STOPWATCH_STATUS_IDX)) {
+        AttsHandleValueNtf(connId, STOPWATCH_STATUS_VALUE_HANDLE, sizeof(newStatus), (uint8_t *)&newStatus);
+    }
+
+    stopwatchStatus = newStatus;
 }
