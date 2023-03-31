@@ -54,6 +54,7 @@ void WS2812B_init() {
             gpioData[i * WS2812B_BITS_PER_PIXEL + j * 3 + 2] = 0;
         }
     }
+    gpioData[sizeof(gpioData) - 1] = 1;
 }
 
 void WS2812B_SetColor(int index, uint8_t r, uint8_t g, uint8_t b) {
