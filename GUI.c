@@ -5,6 +5,7 @@
 #include "BLE.h"
 #include "Button.h"
 #include "Display.h"
+#include "FuelGauge.h"
 #include "Time.h"
 #include "Ws2812b.h"
 
@@ -38,6 +39,7 @@ static const uint8_t bleIcon[] = {
     0b00100100,
 };
 
+/*
 static const uint8_t eyeIcon[] = {
     0b00011000,
     0b00100100,
@@ -48,6 +50,7 @@ static const uint8_t eyeIcon[] = {
     0b00100100,
     0b00011000,
 };
+*/
 
 static const uint8_t batIcon[] = {
     0b11111110,
@@ -56,6 +59,16 @@ static const uint8_t batIcon[] = {
     0b11111110,
 };
 
+static const uint8_t batIconChargeFill[] = {
+    0b10000011,
+    0b11000011,
+    0b11100011,
+    0b11110011,
+    0b11111011,
+    0b11111111,
+};
+
+/*
 static const uint8_t closeIcon[] = {
     0,
     0,
@@ -66,13 +79,14 @@ static const uint8_t closeIcon[] = {
     0b00100010,
     0,
 };
+*/
 
 #define GUI_MENU_POS 0
 #define GUI_STATUS_POS (sizeof(menuIcon) + 2)
 #define GUI_BAT_POS (DISPLAY_WIDTH - sizeof(batIcon))
 #define GUI_BLE_POS (DISPLAY_WIDTH - sizeof(batIcon) - sizeof(bleIcon) - 4)
 
-#define GUI_LED_BRIGHTNESS 5
+#define GUI_LED_BRIGHTNESS 3
 
 #define LAPS_MAX 256
 
@@ -80,7 +94,7 @@ static void GUI_RenderScreen();
 static void GUI_StartClick(uint32_t pressTime);
 static void GUI_StopClick(uint32_t pressTime);
 static void GUI_LapClick(uint32_t pressTime);
-static void GUI_StandbyClick(uint32_t pressTime);
+// static void GUI_StandbyClick(uint32_t pressTime);
 static void GUI_MenuClick(uint32_t pressTime);
 static void GUI_SetReadyModeButtons();
 static void GUI_SetRunModeButtons();
@@ -100,7 +114,6 @@ static int lapCount = 0;
 static char lapNoStatusString[16];
 
 static uint32_t animationCounter = 0;
-static int ledAnimation = 0;
 
 static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
     if (pMsg == NULL || pMsg->event != GUI_TIMER_TICK_EVENT) {
@@ -109,7 +122,7 @@ static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
 
     animationCounter++;
 
-    int isAnimationRenderNeeded = !isBleConnected && isBleAdvertisign && (animationCounter % 5 == 0);
+    int isAnimationRenderNeeded = ((!isBleConnected && isBleAdvertisign) || FuelGauge_IsCharging()) && (animationCounter % 5 == 0);
 
     if (isStopwatchRunning || isAnimationRenderNeeded) {
         GUI_RenderScreen();
@@ -159,6 +172,34 @@ void GUI_HandleButtonPress(int buttonNumber, uint32_t pressTime) {
     }
 }
 
+static void GUI_RenderBatteryIcon() {
+    for (int i = 0; i < sizeof(batIcon); i++) {
+        Display_SetPixelBuffer(GUI_BAT_POS + i, 0, batIcon[i]);
+    }
+
+    uint8_t batteryFill;
+    if (FuelGauge_IsCharging()) {
+        batteryFill = batIconChargeFill[(animationCounter % 30) / 5];
+    } else {
+        int level = FuelGauge_GetBatteryStatus();
+        if (level < 16) {
+            batteryFill = batIconChargeFill[0];
+        } else if (level < 32) {
+            batteryFill = batIconChargeFill[1];
+        } else if (level < 48) {
+            batteryFill = batIconChargeFill[2];
+        } else if (level < 64) {
+            batteryFill = batIconChargeFill[3];
+        } else if (level < 80) {
+            batteryFill = batIconChargeFill[4];
+        } else {
+            batteryFill = batIconChargeFill[5];
+        }
+    }
+    Display_OrPixelBuffer(GUI_BAT_POS + 1, 0, batteryFill);
+    Display_OrPixelBuffer(GUI_BAT_POS + 2, 0, batteryFill);
+}
+
 static void GUI_RenderStatusBar() {
     for (int i = 0; i < sizeof(menuIcon); i++) {
         Display_SetPixelBuffer(i + GUI_MENU_POS, 0, menuIcon[i]);
@@ -176,9 +217,7 @@ static void GUI_RenderStatusBar() {
         }
     }
 
-    for (int i = 0; i < sizeof(batIcon); i++) {
-        Display_SetPixelBuffer(i + GUI_BAT_POS, 0, batIcon[i]);
-    }
+    GUI_RenderBatteryIcon();
 
     int statusStringLen = Display_GetStringLength(statusString);
 
@@ -338,8 +377,8 @@ static void GUI_LapClick(uint32_t pressTime) {
     GUI_RenderScreen();
 }
 
-static void GUI_StandbyClick(uint32_t pressTime) {
-}
+// static void GUI_StandbyClick(uint32_t pressTime) {
+// }
 
 static void GUI_MenuClick(uint32_t pressTime) {
 }

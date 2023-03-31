@@ -2,6 +2,7 @@
 #include "BLE.h"
 #include "Button.h"
 #include "Display.h"
+#include "FuelGauge.h"
 #include "GUI.h"
 #include "Time.h"
 #include "Ws2812b.h"
@@ -16,6 +17,7 @@ int main(void) {
     Button_Init();
     Display_Init();
     WS2812B_init();
+    FuelGauge_Init();
     GUI_Init();
 
     WsfOsEnterMainLoop();

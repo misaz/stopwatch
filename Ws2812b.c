@@ -78,8 +78,50 @@ void WS2812B_Transmit() {
         __NOP();
     }
 
+    uint32_t values[3 + WS2812B_LEDS_MAX * WS2812B_BITS_PER_PIXEL + 1];
+    values[0] = 0;
+    values[1] = 0;
+    values[2] = 0;
+
     for (int i = 0; i < sizeof(gpioData); i++) {
-        MXC_GPIO_OutPut(WS2812B_LED_IN_GPIO, WS2812B_LED_IN_PIN, WS2812B_LED_IN_PIN * gpioData[i]);
+        if (gpioData[i]) {
+            values[i + 3] = WS2812B_LED_IN_GPIO->out | WS2812B_LED_IN_PIN;
+        } else {
+            values[i + 3] = WS2812B_LED_IN_GPIO->out & ~WS2812B_LED_IN_PIN;
+        }
+    }
+
+    for (int i = 0; i < sizeof(values) / sizeof(*values); i++) {
+        WS2812B_LED_IN_GPIO->out = values[i];
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
+        __NOP();
         __NOP();
         __NOP();
         __NOP();
