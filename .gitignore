@@ -1,0 +1,5 @@
+﻿/.vs
+/windows_app/.vs
+/windows_app/BleStopwatchClient/bin
+/windows_app/BleStopwatchClient/obj
+/windows_app/BleStopwatchClient/BleStopwatchClient.vbproj.user
