@@ -12,11 +12,14 @@
 #include <wsf_os.h>
 
 int main(void) {
+    WS2812B_init();
+    WS2812B_SetColor(0, 0, 20, 0);
+    WS2812B_Transmit();
+
     BLE_Init();
     Time_Init();
     Button_Init();
     Display_Init();
-    WS2812B_init();
     FuelGauge_Init();
     GUI_Init();
 

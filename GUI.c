@@ -583,7 +583,17 @@ static void GUI_ShutdownTimerHandler() {
         NVIC_DisableIRQ(i);
     }
     MXC_WUT_Disable();
+
+    mxc_gpio_cfg_t wakeupPins;
+    wakeupPins.port = BUTTON_GPIO;
+    wakeupPins.mask = BUTTON_BTNR_PIN | BUTTON_BTNL_PIN;
+    wakeupPins.func = MXC_GPIO_FUNC_IN;
+    wakeupPins.pad = MXC_GPIO_PAD_NONE;
+    wakeupPins.vssel = MXC_GPIO_VSSEL_VDDIOH;
+
+    MXC_LP_EnableGPIOWakeup(&wakeupPins);
     MXC_GPIO_SetWakeEn(BUTTON_GPIO, BUTTON_BTNR_PIN | BUTTON_BTNL_PIN);
+
     MXC_LP_EnterBackupMode();
 }
 
@@ -595,11 +605,13 @@ static void GUI_Menu_TurnOffClick() {
         AppConnClose(connId);
     }
 
-    WS2812B_SetColor(0, 0, 0, 0);
-    WS2812B_Transmit();
-    WS2812B_Disable();
-
     Display_Off();
+
+    WS2812B_SetColor(0, 0, 0, 0);
+    for (int i = 0; i < 3; i++) {
+        WS2812B_Transmit();
+    }
+    WS2812B_Disable();
 
     mxc_tmr_cfg_t shutdownTmr;
     shutdownTmr.bitMode = TMR_BIT_MODE_32;
