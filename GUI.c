@@ -153,7 +153,7 @@ static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
 
     int isAnimationRenderNeeded = ((!isBleConnected && isBleAdvertisign) || FuelGauge_IsCharging()) && (animationCounter % 5 == 0);
 
-    if (isStopwatchRunning || isAnimationRenderNeeded) {
+    if (isStopwatchRunning || isAnimationRenderNeeded || isMenuOpen) {
         GUI_RenderScreen();
     }
 
