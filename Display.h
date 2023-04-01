@@ -7,6 +7,7 @@
 #define DISPLAY_LINES 6
 
 void Display_Init();
+void Display_Off();
 void Display_SetPixelBuffer(int x, int row, uint8_t value);
 void Display_OrPixelBuffer(int x, int row, uint8_t value);
 void Display_InvertPixelBuffer(int x, int row);

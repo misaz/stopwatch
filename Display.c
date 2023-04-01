@@ -104,7 +104,9 @@ static enum {
     DISPLAY_STATE_INIT_COMMANDS,
     DISPLAY_STATE_SEND_BUFFER_COMMANDS,
     DISPLAY_STATE_SEND_BUFFER,
-    DISPLAY_STATE_IDLE
+    DISPLAY_STATE_IDLE,
+    DISPLAY_STATE_OFF_REQUEST,
+    DISPLAY_STATE_OFF
 } currentState = DISPLAY_STATE_UNINITIALIZED;
 
 static int isI2CActive = 0;
@@ -145,6 +147,23 @@ static void Display_TransmitNextConfigCommand() {
     status = MXC_I2C_MasterTransactionAsync(&i2cRequest);
     if (status) {
         APP_TRACE_ERR1("Display_TransmitNextConfigCommand: MXC_I2C_MasterTransactionAsync failed=%d", status);
+    }
+}
+
+static void Display_TransmitOffCommand() {
+    int status;
+
+    commandBuffer[0] = 0x00;
+    commandBuffer[1] = 0xAE;
+
+    i2cRequest.tx_buf = commandBuffer;
+    i2cRequest.tx_len = sizeof(commandBuffer);
+
+    isI2CActive = 1;
+
+    status = MXC_I2C_MasterTransactionAsync(&i2cRequest);
+    if (status) {
+        APP_TRACE_ERR1("Display_TransmitOffCommand: MXC_I2C_MasterTransactionAsync failed=%d", status);
     }
 }
 
@@ -239,6 +258,13 @@ static void Display_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
             sendBufferCommandToExecute = sendBufferCommands;
             currentState = DISPLAY_STATE_SEND_BUFFER_COMMANDS;
         }
+    } else if (currentState == DISPLAY_STATE_OFF_REQUEST && !isI2CActive) {
+        Display_TransmitOffCommand();
+        currentState = DISPLAY_STATE_OFF;
+    } else if (currentState == DISPLAY_STATE_OFF && !isI2CActive) {
+        if (lastTransactionStatus != 0) {
+            currentState = DISPLAY_STATE_OFF_REQUEST;
+        }
     }
 
     WsfTimerStartMs(&displayOpTimer, 1);
@@ -289,6 +315,10 @@ static void Display_InitI2C() {
     NVIC_EnableIRQ(DISPLAY_I2C_IRQn);
 }
 
+void Display_Off() {
+    currentState = DISPLAY_STATE_OFF_REQUEST;
+}
+
 void Display_Show() {
     Display_SwapBuffers(&workingBuffer, &readyBuffer);
     isTransmitRequested = 1;
@@ -332,10 +362,26 @@ int Display_PrintChar(int x, int row, char ch) {
         Display_SetPixelBuffer(x, row, 0x10);
         Display_SetPixelBuffer(x + 1, row, 0);
         return x + 2;
+    } else if (ch == '*') {
+        Display_SetPixelBuffer(x + 0, row, 0b00000010);
+        Display_SetPixelBuffer(x + 1, row, 0b00000100);
+        Display_SetPixelBuffer(x + 2, row, 0b00001000);
+        Display_SetPixelBuffer(x + 3, row, 0b00000100);
+        Display_SetPixelBuffer(x + 4, row, 0b00000010);
+        Display_SetPixelBuffer(x + 5, row, 0);
+        return x + 6;
     } else if (ch == ' ') {
         Display_SetPixelBuffer(x, row, 0);
         Display_SetPixelBuffer(x + 1, row, 0);
         return x + 2;
+    } else if (ch == '%') {
+        Display_SetPixelBuffer(x + 0, row, 0b00010011);
+        Display_SetPixelBuffer(x + 1, row, 0b00001011);
+        Display_SetPixelBuffer(x + 2, row, 0b00000100);
+        Display_SetPixelBuffer(x + 3, row, 0b00011010);
+        Display_SetPixelBuffer(x + 4, row, 0b00011001);
+        Display_SetPixelBuffer(x + 5, row, 0);
+        return x + 6;
     }
 
     if (ch >= 'a' && ch <= 'z') {
@@ -362,8 +408,12 @@ int Display_GetCharLength(char ch) {
         return 2;
     } else if (ch == '.') {
         return 2;
+    } else if (ch == '*') {
+        return 6;
     } else if (ch == ' ') {
         return 2;
+    } else if (ch == '%') {
+        return 6;
     }
 
     if (ch >= 'a' && ch <= 'z') {

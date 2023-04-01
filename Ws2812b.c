@@ -19,6 +19,7 @@
 #define WS2812B_LED_OUT_PIN MXC_GPIO_PIN_7
 
 static uint8_t gpioData[WS2812B_LEDS_MAX * WS2812B_BITS_PER_PIXEL + 1];
+static int isDisabled = 0;
 
 void WS2812B_init() {
     int status;
@@ -70,6 +71,10 @@ void WS2812B_SetColor(int index, uint8_t r, uint8_t g, uint8_t b) {
 }
 
 void WS2812B_Transmit() {
+    if (isDisabled) {
+        return;
+    }
+
     __disable_irq();
 
     MXC_GPIO_OutClr(WS2812B_LED_IN_GPIO, WS2812B_LED_IN_PIN);
@@ -130,4 +135,8 @@ void WS2812B_Transmit() {
     MXC_GPIO_OutSet(WS2812B_LED_IN_GPIO, WS2812B_LED_IN_PIN);
 
     __enable_irq();
+}
+
+void WS2812B_Disable() {
+    isDisabled = 1;
 }

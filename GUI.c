@@ -14,8 +14,13 @@
 #include <string.h>
 
 /* max32655 + mbed + cordio */
+#include <app_api.h>
+#include <lp.h>
+#include <nvic_table.h>
 #include <wsf_os.h>
 #include <wsf_timer.h>
+#include <wsf_trace.h>
+#include <wut.h>
 
 #define GUI_TIMER_TICK_EVENT 0xfb
 
@@ -39,19 +44,6 @@ static const uint8_t bleIcon[] = {
     0b00100100,
 };
 
-/*
-static const uint8_t eyeIcon[] = {
-    0b00011000,
-    0b00100100,
-    0b01000010,
-    0b01011010,
-    0b01011010,
-    0b01000010,
-    0b00100100,
-    0b00011000,
-};
-*/
-
 static const uint8_t batIcon[] = {
     0b11111110,
     0b10000011,
@@ -68,18 +60,13 @@ static const uint8_t batIconChargeFill[] = {
     0b11111111,
 };
 
-/*
 static const uint8_t closeIcon[] = {
-    0,
-    0,
     0b00100010,
     0b00010100,
     0b00001000,
     0b00010100,
     0b00100010,
-    0,
 };
-*/
 
 #define GUI_MENU_POS 0
 #define GUI_STATUS_POS (sizeof(menuIcon) + 2)
@@ -94,16 +81,21 @@ static void GUI_RenderScreen();
 static void GUI_StartClick(uint32_t pressTime);
 static void GUI_StopClick(uint32_t pressTime);
 static void GUI_LapClick(uint32_t pressTime);
-// static void GUI_StandbyClick(uint32_t pressTime);
 static void GUI_MenuClick(uint32_t pressTime);
+static void GUI_MenuLeftClick(uint32_t pressTime);
+static void GUI_MenuRightClick(uint32_t pressTime);
 static void GUI_SetReadyModeButtons();
 static void GUI_SetRunModeButtons();
+static void GUI_Menu_TurnOffClick();
+static void GUI_Menu_BluetoothClick();
 
 static int isBleConnected = 0;
 static int isBleAdvertisign = 0;
-static char *statusString = "ready";
-static char *buttonText[BUTTON_COUNT];
-static void (*buttonHandlers[BUTTON_COUNT])(uint32_t pressTime);
+static char *mainPageStatusString = "ready";
+static char *mainPageButtonText[BUTTON_COUNT];
+static void (*mainPageButtonHandlers[BUTTON_COUNT])(uint32_t pressTime);
+static char *menuButtonText[BUTTON_COUNT];
+static void (*menuButtonHandlers[BUTTON_COUNT])(uint32_t pressTime);
 
 static uint32_t stopwatchStartTime = 0;
 static uint32_t stopwatchStopTime = 0;
@@ -111,9 +103,46 @@ static int isStopwatchRunning = 0;
 static uint32_t totalTime = 0;
 static uint32_t lapOffsets[LAPS_MAX];
 static int lapCount = 0;
-static char lapNoStatusString[16];
+static char lapNomainPageStatusString[16];
 
 static uint32_t animationCounter = 0;
+
+static char batteryLevelMenuLabel[16] = {'\0'};
+
+static int isMenuOpen = 0;
+static int menuScroll = 0;
+static int menuSelectedItem = 0;
+static struct {
+    char *itemName;
+    char *itemValue;
+    char *actionLabel;
+    void (*clickHandler)();
+} menuItems[] = {
+    {
+        .itemName = "Turn off",
+        .itemValue = "",
+        .actionLabel = "select",
+        .clickHandler = GUI_Menu_TurnOffClick,
+    },
+    {
+        .itemName = "BLE",
+        .itemValue = "CONNECTED",
+        .actionLabel = "change",
+        .clickHandler = GUI_Menu_BluetoothClick,
+    },
+    {
+        .itemName = "Battery",
+        .itemValue = batteryLevelMenuLabel,
+        .actionLabel = "",
+        .clickHandler = NULL,
+    },
+    {
+        .itemName = "FW ver",
+        .itemValue = "1.0",
+        .actionLabel = "",
+        .clickHandler = NULL,
+    },
+};
 
 static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
     if (pMsg == NULL || pMsg->event != GUI_TIMER_TICK_EVENT) {
@@ -130,6 +159,16 @@ static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
 
     if (isStopwatchRunning) {
         BLE_SetCurrentTime(TIME_TIMER->cnt - stopwatchStartTime);
+    }
+
+    snprintf(batteryLevelMenuLabel, sizeof(batteryLevelMenuLabel), "%d %%", FuelGauge_GetBatteryStatus());
+
+    if (isBleConnected) {
+        menuItems[1].itemValue = "connected";
+    } else if (isBleAdvertisign) {
+        menuItems[1].itemValue = "visible";
+    } else {
+        menuItems[1].itemValue = "off";
     }
 
     if (isStopwatchRunning) {
@@ -150,10 +189,17 @@ static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
 }
 
 void GUI_Init() {
-    buttonText[BUTTON_BTNM_NO] = "";
-    buttonHandlers[BUTTON_BTNM_NO] = GUI_MenuClick;
+    mainPageButtonText[BUTTON_BTNM_NO] = "";
+    mainPageButtonHandlers[BUTTON_BTNM_NO] = GUI_MenuClick;
+    menuButtonText[BUTTON_BTNM_NO] = "";
+    menuButtonHandlers[BUTTON_BTNM_NO] = GUI_MenuClick;
 
     GUI_SetReadyModeButtons();
+
+    menuButtonText[BUTTON_BTNL_NO] = "*";
+    menuButtonHandlers[BUTTON_BTNL_NO] = GUI_MenuLeftClick;
+    menuButtonText[BUTTON_BTNR_NO] = "";
+    menuButtonHandlers[BUTTON_BTNR_NO] = GUI_MenuRightClick;
 
     guiTimerHandler = WsfOsSetNextHandler(GUI_TimerHandler);
 
@@ -167,8 +213,14 @@ void GUI_Init() {
 }
 
 void GUI_HandleButtonPress(int buttonNumber, uint32_t pressTime) {
-    if (buttonHandlers[buttonNumber] != NULL) {
-        buttonHandlers[buttonNumber](pressTime);
+    if (isMenuOpen) {
+        if (menuButtonHandlers[buttonNumber] != NULL) {
+            menuButtonHandlers[buttonNumber](pressTime);
+        }
+    } else {
+        if (mainPageButtonHandlers[buttonNumber] != NULL) {
+            mainPageButtonHandlers[buttonNumber](pressTime);
+        }
     }
 }
 
@@ -201,8 +253,14 @@ static void GUI_RenderBatteryIcon() {
 }
 
 static void GUI_RenderStatusBar() {
-    for (int i = 0; i < sizeof(menuIcon); i++) {
-        Display_SetPixelBuffer(i + GUI_MENU_POS, 0, menuIcon[i]);
+    if (isMenuOpen) {
+        for (int i = 0; i < sizeof(closeIcon); i++) {
+            Display_SetPixelBuffer(i + GUI_MENU_POS, 0, closeIcon[i]);
+        }
+    } else {
+        for (int i = 0; i < sizeof(menuIcon); i++) {
+            Display_SetPixelBuffer(i + GUI_MENU_POS, 0, menuIcon[i]);
+        }
     }
 
     if (isBleConnected) {
@@ -219,11 +277,11 @@ static void GUI_RenderStatusBar() {
 
     GUI_RenderBatteryIcon();
 
-    int statusStringLen = Display_GetStringLength(statusString);
+    int mainPageStatusStringLen = Display_GetStringLength(mainPageStatusString);
 
-    int offset = GUI_STATUS_POS + (GUI_BLE_POS - GUI_STATUS_POS) / 2 - statusStringLen / 2;
+    int offset = GUI_STATUS_POS + (GUI_BLE_POS - GUI_STATUS_POS) / 2 - mainPageStatusStringLen / 2;
 
-    Display_PrintString(offset, 0, statusString);
+    Display_PrintString(offset, 0, mainPageStatusString);
 
     for (int i = GUI_STATUS_POS; i < GUI_BLE_POS; i++) {
         Display_ShiftLeftPixelBuffer(i, 0, 1);
@@ -235,15 +293,23 @@ static void GUI_RenderButtons() {
 
     int buttonOrderRemap[2] = {BUTTON_BTNL_NO, BUTTON_BTNR_NO};
 
+    char **textSource;
+    if (isMenuOpen) {
+        textSource = menuButtonText;
+    } else {
+        textSource = mainPageButtonText;
+    }
+
     for (int i = 0; i < 2; i++) {
-        int textLen = Display_GetStringLength(buttonText[buttonOrderRemap[i]]) - 1;
+        int textLen = Display_GetStringLength(textSource[buttonOrderRemap[i]]) - 1;
 
         int offset = i * (DISPLAY_WIDTH / 2) + buttonSize / 2 - textLen / 2;
 
-        Display_PrintString(offset, DISPLAY_LINES - 1, buttonText[buttonOrderRemap[i]]);
+        Display_PrintString(offset, DISPLAY_LINES - 1, textSource[buttonOrderRemap[i]]);
     }
     for (int i = 0; i < DISPLAY_WIDTH; i++) {
-        Display_ShiftLeftPixelBuffer(i, DISPLAY_LINES - 1, 1);
+        Display_ShiftLeftPixelBuffer(i, DISPLAY_LINES - 1, 2);
+        Display_OrPixelBuffer(i, DISPLAY_LINES - 1, 0b00000001);
     }
 
     Display_SetPixelBuffer(buttonSize, DISPLAY_LINES - 1, 0xFF);
@@ -342,6 +408,34 @@ static void GUI_PrintLaps() {
     Display_PrintString(0, 4, line);
 }
 
+static void GUI_RenderMenu() {
+    for (int i = 0; i < sizeof(menuItems) / sizeof(*menuItems); i++) {
+        int line = 1 + i - menuScroll;
+        if (line < 1 || line > 4) {
+            continue;
+        }
+
+        // display item name
+        Display_PrintString(1, line, menuItems[i].itemName);
+
+        // display item name
+        int valLen = Display_GetStringLength(menuItems[i].itemValue);
+        Display_PrintString(DISPLAY_WIDTH - valLen, line, menuItems[i].itemValue);
+
+        for (int j = 0; j < DISPLAY_WIDTH; j++) {
+            Display_ShiftLeftPixelBuffer(j, line, 2);
+        }
+
+        // highlight selected item
+        if (menuSelectedItem == i) {
+            for (int j = 0; j < DISPLAY_WIDTH; j++) {
+                Display_OrPixelBuffer(j, line, 0b00000001);
+                Display_InvertPixelBuffer(j, line);
+            }
+        }
+    }
+}
+
 static void GUI_StartClick(uint32_t pressTime) {
     stopwatchStartTime = pressTime;
     isStopwatchRunning = 1;
@@ -377,42 +471,73 @@ static void GUI_LapClick(uint32_t pressTime) {
     GUI_RenderScreen();
 }
 
-// static void GUI_StandbyClick(uint32_t pressTime) {
-// }
-
 static void GUI_MenuClick(uint32_t pressTime) {
+    if (isMenuOpen) {
+        isMenuOpen = 0;
+    } else {
+        isMenuOpen = 1;
+        menuSelectedItem = 0;
+        menuButtonText[BUTTON_BTNR_NO] = menuItems[menuSelectedItem].actionLabel;
+    }
+
+    GUI_RenderScreen();
+}
+
+static void GUI_MenuLeftClick(uint32_t pressTime) {
+    menuSelectedItem++;
+
+    if (menuSelectedItem >= (sizeof(menuItems) / sizeof(*menuItems))) {
+        menuSelectedItem = 0;
+        menuScroll = 0;
+    }
+
+    if (menuSelectedItem - menuScroll > 4) {
+        menuScroll++;
+    }
+
+    menuButtonText[BUTTON_BTNR_NO] = menuItems[menuSelectedItem].actionLabel;
+
+    GUI_RenderScreen();
+}
+
+static void GUI_MenuRightClick(uint32_t pressTime) {
+    if (menuItems[menuSelectedItem].clickHandler) {
+        menuItems[menuSelectedItem].clickHandler();
+    }
+
+    GUI_RenderScreen();
 }
 
 static void GUI_SetReadyModeButtons() {
-    statusString = "ready";
+    mainPageStatusString = "ready";
 
-    buttonText[BUTTON_BTNL_NO] = "start";
-    buttonHandlers[BUTTON_BTNL_NO] = GUI_StartClick;
+    mainPageButtonText[BUTTON_BTNL_NO] = "start";
+    mainPageButtonHandlers[BUTTON_BTNL_NO] = GUI_StartClick;
 
-    buttonText[BUTTON_BTNR_NO] = "";
-    buttonHandlers[BUTTON_BTNR_NO] = NULL;
+    mainPageButtonText[BUTTON_BTNR_NO] = "";
+    mainPageButtonHandlers[BUTTON_BTNR_NO] = NULL;
 }
 
 static void GUI_SetRunModeButtons() {
     if (lapCount == 0 || lapCount >= LAPS_MAX) {
-        statusString = "run";
+        mainPageStatusString = "run";
     } else if (lapCount < 99) {
-        snprintf(lapNoStatusString, sizeof(lapNoStatusString), "lap %d", lapCount + 1);
-        statusString = lapNoStatusString;
+        snprintf(lapNomainPageStatusString, sizeof(lapNomainPageStatusString), "lap %d", lapCount + 1);
+        mainPageStatusString = lapNomainPageStatusString;
     } else {
-        snprintf(lapNoStatusString, sizeof(lapNoStatusString), "lp %d", lapCount + 1);
-        statusString = lapNoStatusString;
+        snprintf(lapNomainPageStatusString, sizeof(lapNomainPageStatusString), "lp %d", lapCount + 1);
+        mainPageStatusString = lapNomainPageStatusString;
     }
 
-    buttonText[BUTTON_BTNL_NO] = "stop";
-    buttonHandlers[BUTTON_BTNL_NO] = GUI_StopClick;
+    mainPageButtonText[BUTTON_BTNL_NO] = "stop";
+    mainPageButtonHandlers[BUTTON_BTNL_NO] = GUI_StopClick;
 
     if (lapCount < LAPS_MAX) {
-        buttonText[BUTTON_BTNR_NO] = "lap";
-        buttonHandlers[BUTTON_BTNR_NO] = GUI_LapClick;
+        mainPageButtonText[BUTTON_BTNR_NO] = "lap";
+        mainPageButtonHandlers[BUTTON_BTNR_NO] = GUI_LapClick;
     } else {
-        buttonText[BUTTON_BTNR_NO] = "";
-        buttonHandlers[BUTTON_BTNR_NO] = NULL;
+        mainPageButtonText[BUTTON_BTNR_NO] = "";
+        mainPageButtonHandlers[BUTTON_BTNR_NO] = NULL;
     }
 }
 
@@ -429,9 +554,13 @@ void GUI_SetBleConnectionStatus(int isConnected) {
 static void GUI_RenderScreen() {
     Display_Clear();
     GUI_RenderStatusBar();
-    GUI_PrintTime();
-    if (lapCount > 0) {
-        GUI_PrintLaps();
+    if (isMenuOpen) {
+        GUI_RenderMenu();
+    } else {
+        GUI_PrintTime();
+        if (lapCount > 0) {
+            GUI_PrintLaps();
+        }
     }
     GUI_RenderButtons();
     Display_Show();
@@ -446,5 +575,65 @@ uint32_t GUI_GetLapTime(uint8_t lapNumber) {
         return lapOffsets[0] - stopwatchStartTime;
     } else {
         return lapOffsets[lapNumber] - lapOffsets[lapNumber - 1];
+    }
+}
+
+static void GUI_ShutdownTimerHandler() {
+    for (int i = 0; i < MXC_IRQ_COUNT; i++) {
+        NVIC_DisableIRQ(i);
+    }
+    MXC_WUT_Disable();
+    MXC_GPIO_SetWakeEn(BUTTON_GPIO, BUTTON_BTNR_PIN | BUTTON_BTNL_PIN);
+    MXC_LP_EnterBackupMode();
+}
+
+static void GUI_Menu_TurnOffClick() {
+    int status;
+
+    dmConnId_t connId = AppConnIsOpen();
+    if (connId != DM_CONN_ID_NONE) {
+        AppConnClose(connId);
+    }
+
+    WS2812B_SetColor(0, 0, 0, 0);
+    WS2812B_Transmit();
+    WS2812B_Disable();
+
+    Display_Off();
+
+    mxc_tmr_cfg_t shutdownTmr;
+    shutdownTmr.bitMode = TMR_BIT_MODE_32;
+    shutdownTmr.clock = MXC_TMR_32K_CLK;
+    shutdownTmr.cmp_cnt = 64000;
+    shutdownTmr.mode = TMR_MODE_ONESHOT;
+    shutdownTmr.pol = 0;
+    shutdownTmr.pres = TMR_PRES_1;
+
+    status = MXC_TMR_Init(MXC_TMR2, &shutdownTmr, false);
+    if (status) {
+        APP_TRACE_ERR1("Error while enabling shutdown timer. MXC_TMR_Init failed with status code %d", status);
+        return;
+    }
+
+    MXC_NVIC_SetVector(TMR2_IRQn, GUI_ShutdownTimerHandler);
+    NVIC_SetPriority(TMR2_IRQn, 0);
+    NVIC_ClearPendingIRQ(TMR2_IRQn);
+    NVIC_EnableIRQ(TMR2_IRQn);
+
+    MXC_TMR_EnableInt(MXC_TMR2);
+
+    MXC_TMR_Start(MXC_TMR2);
+}
+
+static void GUI_Menu_BluetoothClick() {
+    if (isBleConnected) {
+        dmConnId_t connId = AppConnIsOpen();
+        if (connId != DM_CONN_ID_NONE) {
+            AppConnClose(connId);
+        }
+    } else if (isBleAdvertisign) {
+        AppAdvStop();
+    } else {
+        AppAdvStart(APP_MODE_AUTO_INIT);
     }
 }

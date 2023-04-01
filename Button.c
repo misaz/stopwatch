@@ -12,13 +12,6 @@
 #include <wsf_timer.h>
 #include <wsf_trace.h>
 
-#define BUTTON_GPIO MXC_GPIO0
-#define BUTTON_IRQn GPIO0_IRQn
-#define BUTTON_BTNR_PIN MXC_GPIO_PIN_22
-#define BUTTON_BTNL_PIN MXC_GPIO_PIN_21
-#define BUTTON_BTNM_PIN MXC_GPIO_PIN_25
-#define BUTTON_TIMER_TICK_EVENT 0xFC
-
 static wsfTimer_t timer;
 static wsfHandlerId_t timerHandler;
 
