@@ -39,7 +39,7 @@ Class MainWindow
 			Dim bleAddr = args.BluetoothAddress
 
 			If Not KnownDevices.ContainsKey(bleAddr) Then
-				AddNewDevice(bleAddr)
+				AddNewDevice(bleAddr, args.Advertisement.LocalName)
 			Else
 				RefreshDeviceVisibility(bleAddr)
 			End If
@@ -50,20 +50,23 @@ Class MainWindow
 		KnownDevices(bleAddr).RefreshVisiblity()
 	End Sub
 
-	Private Sub AddNewDevice(bleAddr As ULong)
-		Dim myDev = New StopwatchDevice(bleAddr)
+	Private Sub AddNewDevice(bleAddr As ULong, name As String)
+		Dim myDev = New StopwatchDevice(bleAddr, name)
 
 		KnownDevices.Add(bleAddr, myDev)
 		ScannedDevices.Add(myDev)
-
-		Dispatcher.Invoke(Sub()
-							  RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(ScannedDevices)))
-						  End Sub)
 	End Sub
 
 
 	Private Async Sub Connect_Click(sender As Object, e As RoutedEventArgs)
 		Dim dev As StopwatchDevice = CType(sender, Button).Tag
-		Await dev.ConnectAsync()
+		Try
+			Await dev.ConnectAsync()
+		Catch ex As Exception
+			Dispatcher.Invoke(
+				Sub()
+					MessageBox.Show("Connection failed. Details: " & vbCrLf & vbCrLf & ex.GetType().Name & ": " & ex.Message, "Connection failed", MessageBoxButton.OK, MessageBoxImage.Error)
+				End Sub)
+		End Try
 	End Sub
 End Class

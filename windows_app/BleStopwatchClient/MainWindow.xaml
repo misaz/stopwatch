@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:BleStopwatchClient"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
+        Title="BLE Stopwatch Data Viewer" Height="450" Width="800">
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="2*" />
@@ -25,7 +25,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock FontSize="26">Misaz Stopwatch</TextBlock>
+                        <TextBlock FontSize="24">Misaz Stopwatch</TextBlock>
                         <TextBlock Grid.Row="1" Text="{Binding Address}"></TextBlock>
                         <Button Grid.Column="1" Grid.RowSpan="2" Margin="10" HorizontalAlignment="Right" Tag="{Binding .}" Click="Connect_Click" Visibility="{Binding ConnectButtonVisibility}">Connect</Button>
                     </Grid>
@@ -33,7 +33,26 @@
             </ListView.ItemTemplate>
         </ListView>
         <Grid Grid.Column="2">
-            <TextBlock FontSize="26" Margin="10">Status: <TextBlock Text="{Binding Path=SelectedDevice.Status}"></TextBlock></TextBlock>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="auto" />
+                <RowDefinition Height="auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <TextBlock FontSize="20" Margin="10" Grid.Row="0">Status: <TextBlock Text="{Binding Path=SelectedDevice.Status}"></TextBlock></TextBlock>
+            <TextBlock FontSize="26" Margin="10" Grid.Row="1">Elapsed Time: <TextBlock Text="{Binding Path=SelectedDevice.ElapsedTime}"></TextBlock></TextBlock>
+            <DataGrid AutoGenerateColumns="False" Grid.Row="2" Margin="10" ItemsSource="{Binding Path=SelectedDevice.Laps}">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="#" Width="30" Binding="{Binding Number}" />
+                    <DataGridTextColumn Header="Time" Width="100" Binding="{Binding Time}" />
+                    <DataGridTemplateColumn Header="Label" Width="300">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBox Text="{Binding Description, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" BorderThickness="0" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                </DataGrid.Columns>
+            </DataGrid>
         </Grid>
     </Grid>
 </Window>
