@@ -21,7 +21,7 @@ Public Class StopwatchDevice
 
     Public ReadOnly Property Address As String
         Get
-            Return String.Join(":", From x In BitConverter.GetBytes(_bleAddress) Select x.ToString("X2"))
+            Return String.Join(":", From x In BitConverter.GetBytes(_bleAddress).Take(6).Reverse() Select x.ToString("X2"))
         End Get
     End Property
 
@@ -29,9 +29,9 @@ Public Class StopwatchDevice
         Get
             If _isConnected Then
                 If _isStopwatchRunnig Then
-                    Return "Running"
+                    Return "Stopwatch running"
                 Else
-                    Return "Ready"
+                    Return "Stopwatch stopped"
                 End If
             Else
                 If _isConnecting Then
@@ -43,13 +43,9 @@ Public Class StopwatchDevice
         End Get
     End Property
 
-    Public ReadOnly Property ConnectButtonVisibility As Visibility
+    Public ReadOnly Property CanConnect As Boolean
         Get
-            If _isConnected Then
-                Return Visibility.Hidden
-            Else
-                Return Visibility.Visible
-            End If
+            Return Not _isConnected
         End Get
     End Property
 
@@ -66,6 +62,12 @@ Public Class StopwatchDevice
             Else
                 Return _elapsedTime
             End If
+        End Get
+    End Property
+
+    Public ReadOnly Property Name As String
+        Get
+            Return _bleName
         End Get
     End Property
 
@@ -93,8 +95,6 @@ Public Class StopwatchDevice
         _elapsedTimeUpdateTimer.Interval = New TimeSpan(0, 0, 0, 0, 100)
         AddHandler _elapsedTimeUpdateTimer.Tick, AddressOf _elapsedTimeUpdateTimer_Tick
         _elapsedTimeUpdateTimer.Start()
-        Application.Current.Dispatcher.Invoke(Sub()
-                                              End Sub)
     End Sub
 
     Public Sub RefreshVisiblity()
@@ -106,21 +106,21 @@ Public Class StopwatchDevice
         End If
 
         _isConnecting = True
-        RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(ConnectButtonVisibility)))
+        RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(CanConnect)))
         RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(Status)))
 
         Try
             Await ConnectAsyncInternal()
         Catch ex As Exception
             _isConnecting = False
-            RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(ConnectButtonVisibility)))
+            RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(CanConnect)))
             RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(Status)))
             Throw
         End Try
 
         _isConnecting = False
         _isConnected = True
-        RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(ConnectButtonVisibility)))
+        RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(CanConnect)))
         RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(Status)))
     End Function
 
@@ -182,7 +182,13 @@ Public Class StopwatchDevice
 
     Private Sub ConnectionStatusChangedHandler(sender As BluetoothLEDevice, args As Object)
         _isConnected = _bleDevice.ConnectionStatus = BluetoothConnectionStatus.Connected
-        RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(ConnectButtonVisibility)))
+
+
+        If Not _isConnected Then
+            _isStopwatchRunnig = False
+        End If
+
+        RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(CanConnect)))
         RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(Status)))
     End Sub
 
@@ -237,7 +243,7 @@ Public Class StopwatchDevice
     Private Sub SetStopwatchStatus(isRunning As Byte)
         _isStopwatchRunnig = isRunning = 1
 
-        RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(ConnectButtonVisibility)))
+        RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(CanConnect)))
         RaiseEvent PropertyChanged(Me, New PropertyChangedEventArgs(NameOf(Status)))
     End Sub
 
@@ -312,6 +318,6 @@ Public Class StopwatchDevice
     End Sub
 
     Private Function ConvertTimeToTimespan(time As UInteger) As TimeSpan
-        Return New TimeSpan(0, 0, 0, 0, time / 32.768)
+        Return New TimeSpan(0, 0, 0, 0, Math.Floor(time / 32.768))
     End Function
 End Class
