@@ -262,9 +262,7 @@ static void Display_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
         Display_TransmitOffCommand();
         currentState = DISPLAY_STATE_OFF;
     } else if (currentState == DISPLAY_STATE_OFF && !isI2CActive) {
-        if (lastTransactionStatus != 0) {
-            currentState = DISPLAY_STATE_OFF_REQUEST;
-        }
+        currentState = DISPLAY_STATE_OFF_REQUEST;
     }
 
     WsfTimerStartMs(&displayOpTimer, 1);
