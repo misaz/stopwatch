@@ -111,7 +111,7 @@ static const uint8_t avertisignData[] = {
 
 static const uint8_t scanData[] = {
     /*! device name */
-    11,                     /*! length */
+    16,                     /*! length */
     DM_ADV_TYPE_LOCAL_NAME, /*! AD type */
     'M',
     'i',
@@ -119,10 +119,15 @@ static const uint8_t scanData[] = {
     'a',
     'z',
     ' ',
+    'S',
     't',
-    'e',
-    's',
+    'o',
+    'p',
+    'w',
+    'a',
     't',
+    'c',
+    'h',
 };
 
 #define STOPWATCH_SERVICE_GUID 0x00, 0xca, 0x1f, 0x05, 0x95, 0x95, 0xf5, 0xd6, 0x21, 0x7c, 0xcc, 0x85, 0x88, 0x1e, 0x61, 0x2c
