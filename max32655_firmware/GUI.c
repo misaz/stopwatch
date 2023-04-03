@@ -119,12 +119,6 @@ static struct {
     void (*clickHandler)();
 } menuItems[] = {
     {
-        .itemName = "Turn off",
-        .itemValue = "",
-        .actionLabel = "select",
-        .clickHandler = GUI_Menu_TurnOffClick,
-    },
-    {
         .itemName = "BLE",
         .itemValue = "CONNECTED",
         .actionLabel = "change",
@@ -141,6 +135,12 @@ static struct {
         .itemValue = "1.0",
         .actionLabel = "",
         .clickHandler = NULL,
+    },
+    {
+        .itemName = "Turn off",
+        .itemValue = "",
+        .actionLabel = "select",
+        .clickHandler = GUI_Menu_TurnOffClick,
     },
 };
 
@@ -164,11 +164,11 @@ static void GUI_TimerHandler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
     snprintf(batteryLevelMenuLabel, sizeof(batteryLevelMenuLabel), "%d %%", FuelGauge_GetBatteryStatus());
 
     if (isBleConnected) {
-        menuItems[1].itemValue = "connected";
+        menuItems[0].itemValue = "connected";
     } else if (isBleAdvertisign) {
-        menuItems[1].itemValue = "visible";
+        menuItems[0].itemValue = "visible";
     } else {
-        menuItems[1].itemValue = "off";
+        menuItems[0].itemValue = "off";
     }
 
     if (isStopwatchRunning) {
@@ -320,9 +320,34 @@ static void GUI_RenderButtons() {
     }
 }
 
-static void GUI_PrintTime() {
-    char *str;
+static void GUI_FormatTime(uint32_t time, char *timeBuffer, size_t timeBufferSize, int shortFormat) {
+    int secTotal = time / TIME_TICK_PER_SEC;
 
+    int hours = secTotal / 3600;
+    secTotal %= 3600;
+
+    int minutes = secTotal / 60;
+    secTotal %= 60;
+
+    int sec = secTotal;
+
+    uint32_t msecPart = time % TIME_TICK_PER_SEC;
+    int msec = (int)((float)(1000 * msecPart) / (float)TIME_TICK_PER_SEC);
+
+    if (shortFormat) {
+        if (hours == 0 && minutes == 0) {
+            snprintf(timeBuffer, timeBufferSize, "%02d.%03d", sec, msec);
+        } else if (hours == 0) {
+            snprintf(timeBuffer, timeBufferSize, "%02d:%02d.%03d", minutes, sec, msec);
+        } else {
+            snprintf(timeBuffer, timeBufferSize, "%02d:%02d:%02d", hours, minutes, sec);
+        }
+    } else {
+        snprintf(timeBuffer, timeBufferSize, "%02d:%02d:%02d.%03d", hours, minutes, sec, msec);
+    }
+}
+
+static void GUI_PrintTime() {
     uint32_t timeToRender;
 
     if (!isStopwatchRunning) {
@@ -332,51 +357,13 @@ static void GUI_PrintTime() {
         timeToRender = now - stopwatchStartTime;
     }
 
-    int sec_total = timeToRender / TIME_TICK_PER_SEC;
-
-    int hours = sec_total / 3600;
-    sec_total %= 3600;
-
-    int minutes = sec_total / 60;
-    sec_total %= 60;
-
-    int sec = sec_total;
-
-    float ticksPerMsec = (float)TIME_TICK_PER_SEC / 1000.0;
-    int msec = (int)((float)(timeToRender % TIME_TICK_PER_SEC) / ticksPerMsec);
-
     char buff[32];
-    snprintf(buff, sizeof(buff), "%02d:%02d:%02d.%03d", hours, minutes, sec, msec);
+    GUI_FormatTime(timeToRender, buff, sizeof(buff), 0);
 
-    str = buff;
-
-    int len = Display_GetStringLength(str) - 1;
+    int len = Display_GetStringLength(buff) - 1;
     int offset = DISPLAY_WIDTH / 2 - len / 2;
 
-    Display_PrintString(offset, 2, str);
-}
-
-static void GUI_PrintLapTime(uint32_t time, char *timeBuffer, size_t timeBufferSize) {
-    int sec_total = time / TIME_TICK_PER_SEC;
-
-    int hours = sec_total / 3600;
-    sec_total %= 3600;
-
-    int minutes = sec_total / 60;
-    sec_total %= 60;
-
-    int sec = sec_total;
-
-    float ticksPerMsec = (float)TIME_TICK_PER_SEC / 1000.0;
-    int msec = (int)((float)(time % TIME_TICK_PER_SEC) / ticksPerMsec);
-
-    if (hours == 0 && minutes == 0) {
-        snprintf(timeBuffer, timeBufferSize, "%02d.%03d", sec, msec);
-    } else if (hours == 0) {
-        snprintf(timeBuffer, timeBufferSize, "%02d:%02d.%03d", minutes, sec, msec);
-    } else {
-        snprintf(timeBuffer, timeBufferSize, "%02d:%02d:%02d", hours, minutes, sec);
-    }
+    Display_PrintString(offset, 2, buff);
 }
 
 static void GUI_PrintLaps() {
@@ -391,7 +378,7 @@ static void GUI_PrintLaps() {
         lapTime = lapOffsets[lapCount - 1] - lapOffsets[lapCount - 2];
     }
 
-    GUI_PrintLapTime(lapTime, time, sizeof(time));
+    GUI_FormatTime(lapTime, time, sizeof(time), 1);
     snprintf(line, sizeof(line), "L%d: %s", lapCount, time);
 
     Display_PrintString(0, 3, line);
@@ -402,7 +389,7 @@ static void GUI_PrintLaps() {
         lapTime = stopwatchStopTime - lapOffsets[lapCount - 1];
     }
 
-    GUI_PrintLapTime(lapTime, time, sizeof(time));
+    GUI_FormatTime(lapTime, time, sizeof(time), 1);
     snprintf(line, sizeof(line), "L%d: %s", lapCount + 1, time);
 
     Display_PrintString(0, 4, line);
@@ -642,6 +629,9 @@ static void GUI_Menu_BluetoothClick() {
         dmConnId_t connId = AppConnIsOpen();
         if (connId != DM_CONN_ID_NONE) {
             AppConnClose(connId);
+        } else {
+            isBleConnected = 0;
+            AppAdvStart(APP_MODE_AUTO_INIT);
         }
     } else if (isBleAdvertisign) {
         AppAdvStop();
