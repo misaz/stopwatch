@@ -54,9 +54,11 @@ static uint8_t BLE_StopwatchWriteCallback(dmConnId_t connId, uint16_t handle, ui
 static wsfBufPoolDesc_t memoryPoolDescriptors[] = {
     {.len = 16, .num = 8},
     {.len = 32, .num = 4},
-    {.len = 192, .num = 8},
-    {.len = 256, .num = 8},
+    {.len = 192, .num = 4},
+    {.len = 256, .num = 4},
     {.len = 512, .num = 4},
+    {.len = 0, .num = 0},  // item values loadded dynamicaly in init function
+    {.len = 0, .num = 0},  // item values loadded dynamicaly in init function
 };
 
 static const smpCfg_t secureManagerConfig = {
@@ -414,7 +416,7 @@ enum {
     NUM_CCC_IDX
 };
 
-static const attsCccSet_t fitCccSet[NUM_CCC_IDX] = {
+static const attsCccSet_t cccSet[NUM_CCC_IDX] = {
     {
         .handle = GATT_SC_CH_CCC_HDL,
         .valueRange = ATT_CLIENT_CFG_INDICATE,
@@ -438,23 +440,22 @@ static volatile int wutTrimComplete;
 wsfHandlerId_t bleHandlerId;
 
 static void BLE_InitWsf(void) {
-    /* +12 for message headroom, + 2 event header, +255 maximum parameter length. */
-    const uint16_t maxRptBufSize = 12 + 2 + 255;
+    // initialization logic inspired in Maxim sample
 
-    /* +12 for message headroom, +4 for header. */
-    const uint16_t aclBufSize = 12 + mainLlRtCfg.maxAclLen + 4 + BB_DATA_PDU_TAILROOM;
+    // 269 come from Maxim example
+    memoryPoolDescriptors[5].len = 269;
+    memoryPoolDescriptors[5].num = mainLlRtCfg.maxAdvReports;
 
-    /* Adjust buffer allocation based on platform configuration. */
-    memoryPoolDescriptors[2].len = maxRptBufSize;
-    memoryPoolDescriptors[2].num = mainLlRtCfg.maxAdvReports;
-    memoryPoolDescriptors[3].len = aclBufSize;
-    memoryPoolDescriptors[3].num = mainLlRtCfg.numTxBufs + mainLlRtCfg.numRxBufs;
+    // expression come from Maxim example
+    memoryPoolDescriptors[6].len = 16 + mainLlRtCfg.maxAclLen + BB_DATA_PDU_TAILROOM;
+    memoryPoolDescriptors[6].num = mainLlRtCfg.numTxBufs + mainLlRtCfg.numRxBufs;
 
-    const uint8_t numPools = sizeof(memoryPoolDescriptors) / sizeof(memoryPoolDescriptors[0]);
+    const uint8_t memoryPoolsCount = sizeof(memoryPoolDescriptors) / sizeof(*memoryPoolDescriptors);
 
     uint16_t memUsed;
-    memUsed = WsfBufInit(numPools, memoryPoolDescriptors);
+    memUsed = WsfBufInit(memoryPoolsCount, memoryPoolDescriptors);
     WsfHeapAlloc(memUsed);
+
     WsfOsInit();
     WsfTimerInit();
 #if (WSF_TOKEN_ENABLED == TRUE) || (WSF_TRACE_ENABLED == TRUE)
@@ -464,6 +465,8 @@ static void BLE_InitWsf(void) {
 }
 
 void BLE_InitStack() {
+    // initialization logic inspired in Maxim sample
+
     wsfHandlerId_t handlerId;
 
     SecInit();
@@ -508,7 +511,8 @@ void BLE_InitStack() {
 }
 
 void BLE_Init() {
-    /* Configurations must be persistent. */
+    // initialization logic inspired in Maxim sample
+
     static BbRtCfg_t mainBbRtCfg;
 
     PalBbLoadCfg((PalBbCfg_t *)&mainBbRtCfg);
@@ -522,19 +526,8 @@ void BLE_Init() {
     PalCfgLoadData(PAL_CFG_ID_BLE_PHY, &mainLlRtCfg.phy2mSup, 4);
 #endif
 
-    /* Set the 32k sleep clock accuracy into one of the following bins, default is 20
-      HCI_CLOCK_500PPM
-      HCI_CLOCK_250PPM
-      HCI_CLOCK_150PPM
-      HCI_CLOCK_100PPM
-      HCI_CLOCK_75PPM
-      HCI_CLOCK_50PPM
-      HCI_CLOCK_30PPM
-      HCI_CLOCK_20PPM
-    */
     mainBbRtCfg.clkPpm = 20;
 
-    /* Set the default connection power level */
     mainLlRtCfg.defTxPwrLvl = 0;
 
     uint32_t memUsed;
@@ -559,19 +552,15 @@ void BLE_Init() {
     PalCfgLoadData(PAL_CFG_ID_BD_ADDR, bdAddr, sizeof(bdAddr_t));
     LlSetBdAddr((uint8_t *)&bdAddr);
 
-    /* Start the 32 MHz crystal and the BLE DBB counter to trim the 32 kHz crystal */
     PalBbEnable();
 
-    /* Output buffered square wave of 32 kHz clock to GPIO */
     MXC_RTC_SquareWaveStart(MXC_RTC_F_32KHZ);
 
-    /* Execute the trim procedure */
     wutTrimComplete = 0;
     MXC_WUT_TrimCrystalAsync(BLE_WakeupTimerTrimCallback);
     while (!wutTrimComplete) {
     }
 
-    /* Shutdown the 32 MHz crystal and the BLE DBB */
     PalBbDisable();
 
     BLE_InitStack();
@@ -579,65 +568,52 @@ void BLE_Init() {
 }
 
 static void BLE_HandlerInit(wsfHandlerId_t handlerId) {
-    APP_TRACE_INFO0("FitHandlerInit");
+    APP_TRACE_INFO0("BLE_HandlerInit");
 
-    /* store handler ID */
     bleHandlerId = handlerId;
 
-    /* Set configuration pointers */
     pAppAdvCfg = (appAdvCfg_t *)&advertisignConfig;
     pAppSlaveCfg = (appSlaveCfg_t *)&slaveConfig;
     pAppSecCfg = (appSecCfg_t *)&securityConfig;
     pAppUpdateCfg = (appUpdateCfg_t *)&updateConfig;
 
-    /* Initialize application framework */
     AppSlaveInit();
     AppServerInit();
 
-    /* Set stack configuration pointers */
     pSmpCfg = (smpCfg_t *)&secureManagerConfig;
 }
 
 static void BLE_Handler(wsfEventMask_t event, wsfMsgHdr_t *pMsg) {
     if (pMsg != NULL) {
-        APP_TRACE_INFO1("Fit got evt %d", pMsg->event);
+        APP_TRACE_INFO1("Processing event %d", pMsg->event);
 
-        /* process ATT messages */
         if (pMsg->event >= ATT_CBACK_START && pMsg->event <= ATT_CBACK_END) {
-            /* process server-related ATT messages */
             AppServerProcAttMsg(pMsg);
         } else if (pMsg->event >= DM_CBACK_START && pMsg->event <= DM_CBACK_END) {
-            /* process DM messages */
-            /* process advertising and connection-related messages */
             AppSlaveProcDmMsg((dmEvt_t *)pMsg);
-
-            /* process security-related messages */
             AppSlaveSecProcDmMsg((dmEvt_t *)pMsg);
         }
 
-        /* perform profile and user interface-related operations */
         BLE_ProcessMessage(pMsg);
     }
 }
 
 static void BLE_Start() {
-    /* Register for stack callbacks */
+    // start logic inspired in Maxim sample
+
     DmRegister(BLE_DeviceManagementCallback);
     DmConnRegister(DM_CLIENT_ID_APP, BLE_DeviceManagementCallback);
     AttRegister(BLE_AttCallback);
     AttConnRegister(AppServerConnCback);
-    AttsCccRegister(NUM_CCC_IDX, (attsCccSet_t *)fitCccSet, BLE_CccCallback);
+    AttsCccRegister(NUM_CCC_IDX, (attsCccSet_t *)cccSet, BLE_CccCallback);
 
-    /* Initialize attribute server database */
     SvcCoreGattCbackRegister(GattReadCback, GattWriteCback);
     SvcCoreAddGroup();
 
     AttsAddGroup(&stopwatchGroup);
 
-    /* Set Service Changed CCCD index. */
     GattSetSvcChangedIdx(GATT_SC_CCC_IDX);
 
-    /* Reset the device */
     DmDevReset();
 }
 
@@ -680,11 +656,9 @@ static void BLE_CccCallback(attsCccEvt_t *pEvt) {
     attsCccEvt_t *pMsg;
     appDbHdl_t dbHdl;
 
-    /* If CCC not set from initialization and there's a device record and currently bonded */
     if ((pEvt->handle != ATT_HANDLE_NONE) &&
         ((dbHdl = AppDbGetHdl((dmConnId_t)pEvt->hdr.param)) != APP_DB_HDL_NONE) &&
         AppCheckBonded((dmConnId_t)pEvt->hdr.param)) {
-        /* Store value in device database. */
         AppDbSetCccTblValue(dbHdl, pEvt->idx, pEvt->value);
     }
 
