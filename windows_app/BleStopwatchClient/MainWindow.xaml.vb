@@ -69,7 +69,7 @@ Class MainWindow
 	End Sub
 
 	Private Sub BleWatcher_Received(sender As BluetoothLEAdvertisementWatcher, args As BluetoothLEAdvertisementReceivedEventArgs) Handles BleWatcher.Received
-		If args.Advertisement.LocalName = "Misaz test" Then
+		If args.Advertisement.LocalName = "Misaz Stopwatch" Then
 			Dim bleAddr = args.BluetoothAddress
 
 			If Not KnownDevices.ContainsKey(bleAddr) Then
